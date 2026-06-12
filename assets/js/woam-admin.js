@@ -370,4 +370,210 @@
         }
     }
 
+    /**
+     * Runs a batched AJAX operation until the server returns processed === 0.
+     * Updates the progress bar and summary text after each batch.
+     *
+     * @param {Object}      opts
+     * @param {string}      opts.action        wp_ajax_ action name.
+     * @param {Object}      opts.payload       POST fields sent with every batch request.
+     * @param {number}      opts.total         Total order count (for progress %).
+     * @param {HTMLElement} opts.progressEl    The .woam-progress wrapper element.
+     * @param {HTMLElement} opts.fillEl        The .woam-progress-fill bar element.
+     * @param {HTMLElement} opts.textEl        The <p> progress text element.
+     * @param {HTMLElement} opts.summaryEl     Container for the final result summary.
+     * @param {HTMLElement} opts.startBtn      The Start button — disabled during run.
+     * @returns {Promise<void>}
+     */
+    async function runBatchLoop( opts ) {
+        const { action, payload, total, progressEl, fillEl, textEl, summaryEl, startBtn } = opts;
+
+        let processed  = 0;
+        let succeeded  = 0;
+        let failed     = 0;
+
+        startBtn.disabled = true;
+        progressEl.style.display = 'block';
+        summaryEl.innerHTML = '';
+
+        try {
+            while ( true ) {
+                const data = await woamPost( action, payload );
+
+                processed += data.processed;
+                succeeded += data.succeeded;
+                failed    += data.failed;
+
+                // Update progress bar.
+                const pct = total > 0 ? Math.min( Math.round( ( processed / total ) * 100 ), 100 ) : 100;
+                fillEl.style.width = pct + '%';
+                textEl.textContent = `${ formatNumber( processed ) } of ${ formatNumber( total ) } processed`;
+
+                // Stop when the server returns an empty batch.
+                if ( data.processed === 0 ) {
+                    break;
+                }
+            }
+
+            // Final summary.
+            const dryNote = payload.dry_run ? ' <em>(dry run — no changes made)</em>' : '';
+            summaryEl.innerHTML = `
+                <div class="woam-summary woam-summary--${ failed > 0 ? 'warn' : 'ok' }">
+                    <p><strong>${ formatNumber( succeeded ) }</strong> succeeded &nbsp;
+                    <strong>${ formatNumber( failed ) }</strong> failed${ dryNote }</p>
+                </div>`;
+
+            // Mark other tabs as needing a reload.
+            state.dirty = true;
+
+        } catch ( err ) {
+            summaryEl.innerHTML = `<div class="woam-summary woam-summary--error">
+                <p>${ escHtml( err.message ) }</p>
+            </div>`;
+        } finally {
+            startBtn.disabled = false;
+        }
+    }
+    /**
+     * Wires up all interactivity for Tab 2 — Archive Orders.
+     * Preset buttons, step navigation, impact calculation, batch loop.
+     */
+    function initArchiveTab() {
+        const container = document.querySelector( '.woam-steps[data-mode="archive"]' );
+        if ( ! container ) return;
+
+        // --- Preset buttons ---
+        // Each button sets the date input to N months ago from today.
+        container.querySelectorAll( '.woam-preset-btn' ).forEach( btn => {
+            btn.addEventListener( 'click', () => {
+                const months = parseInt( btn.dataset.month );
+                const d      = new Date();
+                d.setMonth( d.getMonth() - months );
+
+                // Format as YYYY-MM-DD for the date input.
+                const yyyy = d.getFullYear();
+                const mm   = String( d.getMonth() + 1 ).padStart( 2, '0' );
+                const dd   = String( d.getDate() ).padStart( 2, '0' );
+
+                document.getElementById( 'woam-before-date' ).value = `${ yyyy }-${ mm }-${ dd }`;
+
+                // Highlight active preset.
+                container.querySelectorAll( '.woam-preset-btn' ).forEach( b => b.classList.remove( 'woam-preset-btn--active' ) );
+                btn.classList.add( 'woam-preset-btn--active' );
+            } );
+        } );
+
+        // --- Step 1 → Step 2: load savings estimate ---
+        document.getElementById( 'woam-archive-step1-next' ).addEventListener( 'click', async () => {
+            const beforeDate = document.getElementById( 'woam-before-date' ).value;
+            const statuses   = Array.from(
+                container.querySelectorAll( '#woam-archive-statuses input:checked' )
+            ).map( cb => cb.value );
+
+            if ( ! beforeDate ) {
+                alert( 'Please select a date before continuing.' );
+                return;
+            }
+
+            if ( ! statuses.length ) {
+                alert( 'Please select at least one order status.' );
+                return;
+            }
+
+            const impactEl = document.getElementById( 'woam-archive-impact' );
+            impactEl.classList.add( 'woam-loading' );
+            impactEl.innerHTML = 'Calculating…';
+
+            setStep( container, 2 );
+
+            try {
+                const data = await woamPost( 'hw_woam_get_savings_estimate', {
+                    before_date: beforeDate,
+                    statuses,
+                } );
+
+                if ( data.order_count === 0 ) {
+                    impactEl.classList.remove( 'woam-loading' );
+                    impactEl.innerHTML = '<p>No orders match the selected filters.</p>';
+                    return;
+                }
+
+                // Cache total for progress bar.
+                state.totalOrders = data.order_count;
+
+                impactEl.classList.remove( 'woam-loading' );
+                impactEl.innerHTML = `
+                    <div class="woam-impact-table">
+                        <div class="woam-impact-row">
+                            <span>Orders</span>
+                            <strong>${ formatNumber( data.order_count ) }</strong>
+                        </div>
+                        <div class="woam-impact-row">
+                            <span>Order meta rows</span>
+                            <strong>${ formatNumber( data.row_counts.order_meta ) }</strong>
+                        </div>
+                        <div class="woam-impact-row">
+                            <span>Order item rows</span>
+                            <strong>${ formatNumber( data.row_counts.order_items ) }</strong>
+                        </div>
+                        <div class="woam-impact-row">
+                            <span>Order item meta rows</span>
+                            <strong>${ formatNumber( data.row_counts.item_meta ) }</strong>
+                        </div>
+                        <div class="woam-impact-row">
+                            <span>Order note rows</span>
+                            <strong>${ formatNumber( data.row_counts.order_notes ) }</strong>
+                        </div>
+                        <div class="woam-impact-row woam-impact-row--total">
+                            <span>Estimated space freed</span>
+                            <strong>${ escHtml( data.estimated_size ) } <em>(approximate)</em></strong>
+                        </div>
+                    </div>`;
+
+            } catch ( err ) {
+                showError( impactEl, err.message );
+            }
+        } );
+
+        // --- Step 2 → Step 3 ---
+        document.getElementById( 'woam-archive-step2-next' ).addEventListener( 'click', () => {
+            setStep( container, 3 );
+        } );
+
+        // --- Back buttons ---
+        container.querySelectorAll( '[data-step-back]' ).forEach( btn => {
+            btn.addEventListener( 'click', () => {
+                setStep( container, parseInt( btn.dataset.stepBack ) );
+            } );
+        } );
+
+        // --- Start Archive button ---
+        document.getElementById( 'woam-archive-start' ).addEventListener( 'click', async () => {
+            const dryRun     = document.getElementById( 'woam-archive-dry-run' ).checked;
+            const confirmVal = document.getElementById( 'woam-archive-confirm' ).value.trim();
+
+            // Confirmation gate — skip for dry runs.
+            if ( ! dryRun && confirmVal !== 'ARCHIVE' ) {
+                alert( 'Please type ARCHIVE to confirm.' );
+                return;
+            }
+
+            const beforeDate = document.getElementById( 'woam-before-date' ).value;
+            const statuses   = Array.from(
+                container.querySelectorAll( '#woam-archive-statuses input:checked' )
+            ).map( cb => cb.value );
+
+            await runBatchLoop( {
+                action:     'hw_woam_archive_batch',
+                payload:    { before_date: beforeDate, statuses, dry_run: dryRun ? '1' : '' },
+                total:      state.totalOrders,
+                progressEl: document.getElementById( 'woam-archive-progress' ),
+                fillEl:     document.getElementById( 'woam-archive-progress-fill' ),
+                textEl:     document.getElementById( 'woam-archive-progress-text' ),
+                summaryEl:  document.getElementById( 'woam-archive-summary' ),
+                startBtn:   document.getElementById( 'woam-archive-start' ),
+            } );
+        } );
+    }
+
 } )();
