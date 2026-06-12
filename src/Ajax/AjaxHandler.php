@@ -101,6 +101,7 @@ class AjaxHandler{
         add_action( 'wp_ajax_hw_woam_get_savings_estimate', [ $this, 'handle_get_savings_estimate' ] );
         add_action( 'wp_ajax_hw_woam_get_archive_health', [ $this, 'handle_get_archive_health' ] );
         add_action( 'wp_ajax_hw_woam_get_recent_activity', [ $this, 'handle_get_recent_activity' ] );
+        add_action( 'wp_ajax_hw_woam_get_archive_breakdown', [ $this, 'handle_get_archive_breakdown' ] );
     }
 
     /**
@@ -666,6 +667,73 @@ class AjaxHandler{
         }
 
         wp_send_json_success( [ 'activity' => $activity ] );
+    }
+
+    /**
+     * Returns a breakdown of archived orders grouped by status.
+     * Used by Tab 3 (Archived Orders) to show an inventory table
+     * of what's currently sitting in the archive.
+     *
+     * Expects POST: nonce
+     *
+     * @return void
+    */
+
+    public function handle_get_archive_breakdown(): void {
+
+        $this->verify_request();
+
+        global $wpdb;
+
+        $orders_table = $wpdb->prefix . 'woam_orders';
+
+        $rows = $wpdb->get_results(
+            "SELECT post_status, COUNT(*) AS order_count
+            FROM `{$orders_table}`
+            GROUP BY post_status
+            ORDER BY order_count DESC" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        $breakdown   = [];
+        $total_count = 0;
+
+        foreach ( $rows as $row ) {
+            $breakdown[] = [
+                'status'      => $row->post_status,
+                'label'       => $this->get_status_label( $row->post_status ),
+                'order_count' => (int) $row->order_count,
+            ];
+            $total_count += (int) $row->order_count;
+        }
+
+        wp_send_json_success( [
+            'breakdown'   => $breakdown,
+            'total_count' => $total_count,
+        ] );
+    }
+
+    /**
+     * Converts a raw order status slug into a human-readable label.
+     * Uses WooCommerce's own registered statuses when available,
+     * falls back to a simple transformation for unrecognised statuses.
+     *
+     * @param string $status Raw status slug e.g. 'wc-completed'.
+     * @return string Human-readable label e.g. 'Completed'.
+    */
+
+    private function get_status_label( string $status ): string {
+
+        $wc_statuses = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : [];
+
+        if ( isset( $wc_statuses[ $status ] ) ) {
+            return $wc_statuses[ $status ];
+        }
+
+        // Fallback: 'wc-on-hold' → 'On hold'.
+        $label = str_replace( 'wc-', '', $status );
+        $label = str_replace( '-', ' ', $label );
+
+        return ucfirst( $label );
     }
 
 }
