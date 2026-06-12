@@ -17,6 +17,7 @@ use HW\WOAM\Archive\ArchiveHandler;
 use HW\WOAM\Archive\RestoreHandler;
 use HW\WOAM\Archive\DeleteHandler;
 use HW\WOAM\Ajax\AjaxHandler;
+use HW\WOAM\Admin\AdminPage;
 
 
 defined( 'ABSPATH' ) || exit;
@@ -89,6 +90,14 @@ class Plugin {
     private AjaxHandler $ajax_handler;
 
     /**
+     * Admin Page
+     * 
+     * @var AdminPage
+    */
+
+    private AdminPage $admin_page;
+
+    /**
      * Constructor.
      * Private to prevent direct instantiation.
      * Use Plugin::instance() instead.
@@ -158,6 +167,12 @@ class Plugin {
         $this->restore_handler = new RestoreHandler( $wpdb, $this->tables, $this->logger );
         $this->delete_handler = new DeleteHandler( $wpdb, $this->tables, $this->logger );
         $this->ajax_handler = new AjaxHandler( $this->archive_handler, $this->restore_handler, $this->delete_handler);
+
+        if( is_admin() ){
+            $this->admin_page = new AdminPage();
+            $this->admin_page->register_hooks();
+            $this->ajax_handler->register_hooks();
+        }
 
         $this->schema->maybe_upgrade();
         $this->load_textdomain();
