@@ -102,6 +102,7 @@ class AjaxHandler{
         add_action( 'wp_ajax_hw_woam_get_archive_health', [ $this, 'handle_get_archive_health' ] );
         add_action( 'wp_ajax_hw_woam_get_recent_activity', [ $this, 'handle_get_recent_activity' ] );
         add_action( 'wp_ajax_hw_woam_get_archive_breakdown', [ $this, 'handle_get_archive_breakdown' ] );
+        add_action( 'wp_ajax_hw_woam_run_integrity_check', [ $this, 'handle_run_integrity_check' ] );
     }
 
     /**
@@ -734,6 +735,74 @@ class AjaxHandler{
         $label = str_replace( '-', ' ', $label );
 
         return ucfirst( $label );
+    }
+
+    /**
+     * Checks the archive tables for orphaned rows — meta, items, or notes
+     * that reference an order ID no longer present in woam_orders.
+     *
+     * This should normally return zero orphans since all operations run
+     * inside transactions. Provided as a diagnostic tool for the admin.
+     *
+     * Expects POST: nonce
+     *
+     * @return void
+    */
+    
+    public function handle_run_integrity_check(): void {
+
+        $this->verify_request();
+
+        global $wpdb;
+
+        $orders_table            = $wpdb->prefix . 'woam_orders';
+        $orders_meta_table       = $wpdb->prefix . 'woam_orders_meta';
+        $order_items_table       = $wpdb->prefix . 'woam_order_items';
+        $order_items_meta_table  = $wpdb->prefix . 'woam_order_items_meta';
+        $order_notes_table       = $wpdb->prefix . 'woam_order_notes';
+        $order_notes_meta_table  = $wpdb->prefix . 'woam_order_notes_meta';
+
+        $orphaned_meta = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM `{$orders_meta_table}` om
+            LEFT JOIN `{$orders_table}` o ON om.post_id = o.ID
+            WHERE o.ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        $orphaned_items = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM `{$order_items_table}` oi
+            LEFT JOIN `{$orders_table}` o ON oi.order_id = o.ID
+            WHERE o.ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        $orphaned_item_meta = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM `{$order_items_meta_table}` oim
+            LEFT JOIN `{$order_items_table}` oi ON oim.order_item_id = oi.order_item_id
+            WHERE oi.order_item_id IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        $orphaned_notes = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM `{$order_notes_table}` on_
+            LEFT JOIN `{$orders_table}` o ON on_.comment_post_ID = o.ID
+            WHERE o.ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        $orphaned_note_meta = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM `{$order_notes_meta_table}` onm
+            LEFT JOIN `{$order_notes_table}` on_ ON onm.comment_id = on_.comment_ID
+            WHERE on_.comment_ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        $total_orphans = $orphaned_meta + $orphaned_items + $orphaned_item_meta + $orphaned_notes + $orphaned_note_meta;
+
+        wp_send_json_success( [
+            'is_healthy'         => 0 === $total_orphans,
+            'total_orphans'      => $total_orphans,
+            'orphaned_meta'      => $orphaned_meta,
+            'orphaned_items'     => $orphaned_items,
+            'orphaned_item_meta' => $orphaned_item_meta,
+            'orphaned_notes'     => $orphaned_notes,
+            'orphaned_note_meta' => $orphaned_note_meta,
+        ] );
     }
 
 }
