@@ -63,5 +63,50 @@ class AdminPage {
         );
     }
 
+    /**
+     * 
+     * Enqueue the plugins CSS and JS on the admin's pages only.
+     * Also passes the AJAX_URL and a nonce via wp_localize_script().
+     * 
+     * @param string $hook The current admin page hook suffix.
+     * @return void
+    */
+
+    public function enqueue_assets( string $hook ): void{
+
+        if( 'toplevel_page_' .self::PAGE_SLUG !== $hook ){
+            return;
+        }
+
+        wp_enqueue_style( 
+            'woam-admin',
+            HW_WOAM_URL . 'assets/css/woam-admin.css',
+            [],
+            HW_WOAM_VERSION
+        );
+
+        wp_enqueue_script(
+            'woam-admin',
+            HW_WOAM_URL . 'assets/js/woam-admin.js',
+            [],
+            HW_WOAM_VERSION
+        );
+
+        wp_localize_script(
+            'woam-admin',
+            'woamData',
+            [
+                'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
+                'nonce'     => wp_create_nonce( 'hw_woam_ajax' ),
+                'i18n'      => [
+                    'confirmArchive'    => __( 'Type ARCHIVE to confirm', 'woo-order-archive-manager' ),
+                    'confirmDelete'     => __( 'Type DELETE to confirm', 'woo-order-archive-manager' ),
+                    'jobRunning'        => __( 'Another job is already running, Please wait..', 'woo-order-archive-manager' ),
+                    'noOrders'          => __( 'No Orders match the selected filer', 'woo-order-archive-manager' ),
+                ],
+            ]
+        );
+    }
+
 }
 
