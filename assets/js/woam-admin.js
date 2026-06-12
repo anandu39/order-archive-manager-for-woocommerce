@@ -158,4 +158,216 @@
         initArchivedTab();
     } );
 
+    /**
+     * Loads all four Overview tab cards in parallel.
+     * Uses Promise.allSettled so one failed request doesn't block the others.
+    */
+    async function loadOverviewTab() {
+
+        await Promise.allSettled( [
+            loadDbStats(),
+            loadArchiveHealth(),
+            loadRecentActivity(),
+            loadStorageImpact(),
+        ] );
+    }
+
+    /**
+     * Fetches table size data and renders the database bar chart.
+     */
+    async function loadDbStats() {
+        const el = document.getElementById( 'woam-db-visualizer' );
+        if ( ! el ) return;
+
+        try {
+            const data = await woamPost( 'hw_woam_get_db_stats' );
+            const max  = data.total_bytes || 1; // Avoid divide-by-zero on empty DB.
+
+            const labels = {
+                posts:        'wp_posts',
+                postmeta:     'wp_postmeta',
+                order_items:  'woocommerce_order_items',
+                order_itemmeta: 'woocommerce_order_itemmeta',
+                comments:     'wp_comments',
+                commentmeta:  'wp_commentmeta',
+            };
+
+            let html = '<div class="woam-db-bars">';
+
+            for ( const [ key, info ] of Object.entries( data.tables ) ) {
+                const pct   = Math.round( ( info.bytes / max ) * 100 );
+                const label = labels[ key ] ?? key;
+
+                html += `
+                    <div class="woam-bar-row">
+                        <span class="woam-bar-label">${ escHtml( label ) }</span>
+                        <div class="woam-bar-track">
+                            <div class="woam-bar-fill" style="width:${ pct }%"></div>
+                        </div>
+                        <span class="woam-bar-value">${ escHtml( info.formatted ) }</span>
+                    </div>`;
+            }
+
+            html += `<p class="woam-db-total">
+                        <strong>Total: ${ escHtml( data.total_formatted ) }</strong>
+                    </p>`;
+            html += '</div>';
+
+            el.classList.remove( 'woam-loading' );
+            el.innerHTML = html;
+
+        } catch ( err ) {
+            showError( el, err.message );
+        }
+    }
+
+    /**
+     * Fetches archive health data and renders the checklist.
+     */
+    async function loadArchiveHealth() {
+        const el = document.getElementById( 'woam-archive-health' );
+        if ( ! el ) return;
+
+        try {
+            const data = await woamPost( 'hw_woam_get_archive_health' );
+
+            const items = [
+                {
+                    ok:    data.tables_ok,
+                    label: data.tables_ok
+                        ? 'Archive tables installed'
+                        : `Missing tables: ${ data.missing_tables.join( ', ' ) }`,
+                },
+                {
+                    ok:    data.version_ok,
+                    label: data.version_ok
+                        ? `Database version ${ data.installed_version } (current)`
+                        : `Database version ${ data.installed_version } — upgrade needed`,
+                },
+                {
+                    ok:    !! data.last_archive,
+                    label: data.last_archive
+                        ? `Last archive: ${ data.last_archive }`
+                        : 'No archive run yet',
+                },
+                {
+                    ok:    !! data.last_restore,
+                    label: data.last_restore
+                        ? `Last restore: ${ data.last_restore }`
+                        : 'No restore run yet',
+                },
+                {
+                    ok:    ! data.job_running,
+                    label: data.job_running
+                        ? 'A job is currently running'
+                        : 'No job currently running',
+                },
+            ];
+
+            let html = '';
+            items.forEach( item => {
+                const icon = item.ok
+                    ? '<span class="dashicons dashicons-yes-alt woam-health-icon woam-health-icon--ok"></span>'
+                    : '<span class="dashicons dashicons-warning woam-health-icon woam-health-icon--warn"></span>';
+
+                html += `<li class="woam-checklist-item woam-checklist-item--${ item.ok ? 'ok' : 'warn' }">
+                            ${ icon }
+                            <span class="woam-checklist-label">${ escHtml( item.label ) }</span>
+                        </li>`;
+            } );
+
+            el.classList.remove( 'woam-loading' );
+            el.innerHTML = html;
+
+        } catch ( err ) {
+            showError( el, err.message );
+        }
+    }
+
+    /**
+     * Fetches recent activity and renders the timeline list.
+    */
+    async function loadRecentActivity() {
+        const el = document.getElementById( 'woam-recent-activity' );
+        if ( ! el ) return;
+
+        try {
+            const data = await woamPost( 'hw_woam_get_recent_activity' );
+
+            if ( ! data.activity.length ) {
+                el.classList.remove( 'woam-loading' );
+                el.innerHTML = '<li class="woam-timeline-empty">No activity yet.</li>';
+                return;
+            }
+
+            const actionLabels = {
+                archive: 'Archived',
+                restore: 'Restored',
+                delete:  'Deleted',
+            };
+
+            let html = '';
+            data.activity.forEach( entry => {
+                const label = actionLabels[ entry.action ] ?? entry.action;
+                html += `<li class="woam-timeline-item woam-timeline-item--${ escHtml( entry.action ) }">
+                            <span class="woam-timeline-date">${ escHtml( entry.date_formatted ) }</span>
+                            <span class="woam-timeline-text">
+                                ${ escHtml( label ) } ${ formatNumber( entry.order_count ) } orders
+                            </span>
+                        </li>`;
+            } );
+
+            el.classList.remove( 'woam-loading' );
+            el.innerHTML = html;
+
+        } catch ( err ) {
+            showError( el, err.message );
+        }
+    }
+
+    /**
+     * Fetches order counts and renders the Storage Impact card.
+     * Fires two parallel requests — archived count and live order count.
+     */
+    async function loadStorageImpact() {
+        const el = document.getElementById( 'woam-storage-impact' );
+        if ( ! el ) return;
+
+        try {
+            const [ breakdownData, statsData ] = await Promise.all( [
+                woamPost( 'hw_woam_get_archive_breakdown' ),
+                woamPost( 'hw_woam_get_db_stats' ),
+            ] );
+
+            const archivedCount  = breakdownData.total_count;
+            const totalDbSize    = statsData.total_formatted;
+            const postmetaBytes  = statsData.tables?.postmeta?.bytes  ?? 0;
+            const postsBytes     = statsData.tables?.posts?.bytes     ?? 0;
+            const orderBytes     = postmetaBytes + postsBytes;
+            const orderPct       = statsData.total_bytes
+                ? Math.round( ( orderBytes / statsData.total_bytes ) * 100 )
+                : 0;
+
+            el.classList.remove( 'woam-loading' );
+            el.innerHTML = `
+                <div class="woam-impact-grid">
+                    <div class="woam-impact-stat">
+                        <span class="woam-impact-number">${ formatNumber( archivedCount ) }</span>
+                        <span class="woam-impact-label">Orders in archive</span>
+                    </div>
+                    <div class="woam-impact-stat">
+                        <span class="woam-impact-number">${ escHtml( totalDbSize ) }</span>
+                        <span class="woam-impact-label">Total order-related DB size</span>
+                    </div>
+                    <div class="woam-impact-stat">
+                        <span class="woam-impact-number">${ orderPct }%</span>
+                        <span class="woam-impact-label">Of DB used by order data</span>
+                    </div>
+                </div>`;
+
+        } catch ( err ) {
+            showError( el, err.message );
+        }
+    }
+
 } )();
