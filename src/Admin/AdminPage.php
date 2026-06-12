@@ -89,7 +89,8 @@ class AdminPage {
             'woam-admin',
             HW_WOAM_URL . 'assets/js/woam-admin.js',
             [],
-            HW_WOAM_VERSION
+            HW_WOAM_VERSION,
+            true  // Load in footer — DOM is ready, no jQuery dependency needed.
         );
 
         wp_localize_script(
@@ -106,6 +107,89 @@ class AdminPage {
                 ],
             ]
         );
+    }
+
+    /**
+     * 
+     * Renders the full admin page - tab navigation and three empty
+     * tab panels. JavaScript fills each panels on tab activation via
+     * AJAX.
+     * 
+     * @return void
+    */
+
+    public function admin_render_page(): void{
+        ?>
+
+        <div class="wrap- woam-wrap">
+            <div class="woam-header">
+                <h1> <?php esc_html_e( 'Order Archive Manager', 'woo-order-archive-manager' ); ?></h1>
+                <p> <?php esc_html_e( 'Archive, restore and manager your WooCommerce data', 'woo-order-archive-manager' ); ?></p>
+            </div>
+
+            <nav class ="woam-tabs" role ="tablist">
+                <button
+                    class="woam-tab woam-tab--active"
+                    role="tab"
+                    aria-selected="true"
+                    aria-contols="woam-panel-overview"
+                    data-tab="overview"
+                >
+                    <?php esc_html_e( 'Overview', 'woo-order-archive-manager' ); ?>
+                </button>
+
+                <button
+                    class="woam-tab"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="woam-panel-archive"
+                    data-tab="archive"
+                >
+                    <?php esc_html_e( 'Archive Orders', 'woo-order-archive-manager' ); ?>
+                </button>
+
+                <button
+                    class="woam-tab"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="woam-panel-archived"
+                    data-tab="archived"
+                >
+                    <?php esc_html_e( 'Archived Orders', 'woo-order-archive-manager' ); ?>
+                </button>
+            </nav>
+
+            <div class="woam-panel">
+                <div
+                    id="woam-panel-overview"
+                    class="woam-panel woam-panel--active"
+                    role="tabpanel"
+                    aria-labelledby="woam-tab-overview"
+                >
+                    <?php include HW_WOAM_PATH . 'assets/views/tab-overview.php'; ?>
+                </div>
+
+                <div
+                    id="woam-panel-archive"
+                    class="woam-panel"
+                    role="tabpanel"
+                    aria-labelledby="woam-tab-archive"
+                >
+                    <?php include HW_WOAM_PATH . 'assets/views/tab-archive.php'; ?>
+                </div>
+
+                <div
+                    id="woam-panel-archived"
+                    class="woam-panel"
+                    role="tabpanel"
+                    aria-labelledby="woam-tab-archived"
+                >
+                    <?php include HW_WOAM_PATH . 'assets/views/tab-archived.php'; ?>
+                </div>
+            </div>
+        </div>
+
+        <?php
     }
 
 }
