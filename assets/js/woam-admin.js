@@ -576,4 +576,276 @@
         } );
     }
 
+    /**
+     * Loads the Archive Inventory card and status checkboxes with a single AJAX call.
+     * Fires on Tab 3 activation.
+     */
+    async function loadArchivedTab() {
+        const inventoryEl = document.getElementById( 'woam-archive-inventory' );
+        const statusEl    = document.getElementById( 'woam-archived-statuses' );
+
+        try {
+            const data = await woamPost( 'hw_woam_get_archive_breakdown' );
+            renderArchiveInventory( inventoryEl, data );
+            renderArchivedStatusCheckboxes( statusEl, data );
+        } catch ( err ) {
+            if ( inventoryEl ) showError( inventoryEl, err.message );
+        }
+    }
+
+    /**
+     * Renders the archive inventory table from breakdown data.
+     *
+     * @param {HTMLElement} el   The inventory container.
+     * @param {Object}      data Response from hw_woam_get_archive_breakdown.
+     */
+    function renderArchiveInventory( el, data ) {
+        if ( ! el ) return;
+
+        if ( ! data.breakdown.length ) {
+            el.classList.remove( 'woam-loading' );
+            el.innerHTML = '<p class="woam-empty">No orders currently in the archive.</p>';
+            return;
+        }
+
+        let html = `
+            <table class="woam-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Orders</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+        data.breakdown.forEach( row => {
+            html += `
+                <tr>
+                    <td>
+                        <span class="woam-status-badge woam-status-badge--${ escHtml( row.status ) }">
+                            ${ escHtml( row.label ) }
+                        </span>
+                    </td>
+                    <td><strong>${ formatNumber( row.order_count ) }</strong></td>
+                </tr>`;
+        } );
+
+        html += `
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td><strong>Total</strong></td>
+                        <td><strong>${ formatNumber( data.total_count ) }</strong></td>
+                    </tr>
+                </tfoot>
+            </table>`;
+
+        el.classList.remove( 'woam-loading' );
+        el.innerHTML = html;
+    }
+
+    /**
+     * Renders status filter checkboxes for Tab 3 Step 1.
+     * Only shows statuses actually present in the archive.
+     *
+     * @param {HTMLElement} el   The checkbox container.
+     * @param {Object}      data Response from hw_woam_get_archive_breakdown.
+     */
+    function renderArchivedStatusCheckboxes( el, data ) {
+        if ( ! el ) return;
+
+        if ( ! data.breakdown.length ) {
+            el.innerHTML = '<p class="woam-empty">No archived orders to filter.</p>';
+            return;
+        }
+
+        let html = '';
+        data.breakdown.forEach( row => {
+            html += `
+                <label class="woam-checkbox">
+                    <input type="checkbox"
+                        name="archived_statuses[]"
+                        value="${ escHtml( row.status ) }" />
+                    ${ escHtml( row.label ) }
+                    <span class="woam-checkbox-count">(${ formatNumber( row.order_count ) })</span>
+                </label>`;
+        } );
+
+        el.innerHTML = html;
+    }
+
+    /**
+     * Wires up all interactivity for Tab 3 — Archived Orders.
+     * Action radio, step navigation, batch loop, integrity check.
+     */
+    function initArchivedTab() {
+        const container = document.querySelector( '.woam-steps[data-mode="archived"]' );
+        if ( ! container ) return;
+
+        // --- Radio change: show/hide confirm input and update Start button label ---
+        container.querySelectorAll( 'input[name="archived_action"]' ).forEach( radio => {
+            radio.addEventListener( 'change', () => {
+                const isDelete     = radio.value === 'delete';
+                const confirmGroup = document.getElementById( 'woam-archived-confirm-group' );
+                const startBtn     = document.getElementById( 'woam-archived-start' );
+
+                // Confirm input only required for permanent delete.
+                confirmGroup.style.display = isDelete ? 'block' : 'none';
+
+                // Clear confirm field when switching away from delete.
+                if ( ! isDelete ) {
+                    document.getElementById( 'woam-archived-confirm' ).value = '';
+                }
+
+                // Update button label to match action.
+                startBtn.textContent = isDelete ? 'Start Deletion' : 'Start Restore';
+
+                // Update Step 3 heading.
+                const title = document.getElementById( 'woam-archived-step3-title' );
+                if ( title ) {
+                    title.textContent = isDelete
+                        ? 'Step 3: Permanently Delete'
+                        : 'Step 3: Restore Orders';
+                }
+            } );
+        } );
+
+        // --- Step 1 → Step 2: load count ---
+        document.getElementById( 'woam-archived-step1-next' ).addEventListener( 'click', async () => {
+            const action   = container.querySelector( 'input[name="archived_action"]:checked' )?.value ?? 'restore';
+            const statuses = Array.from(
+                container.querySelectorAll( '#woam-archived-statuses input:checked' )
+            ).map( cb => cb.value );
+
+            // Empty statuses = all archived orders.
+            const impactEl = document.getElementById( 'woam-archived-impact' );
+            impactEl.classList.add( 'woam-loading' );
+            impactEl.innerHTML = 'Calculating…';
+
+            setStep( container, 2 );
+
+            try {
+                // get_count works for both restore and delete — both query woam_orders.
+                const data = await woamPost( 'hw_woam_get_count', {
+                    mode: action,
+                    statuses,
+                } );
+
+                state.totalOrders = data.count;
+
+                impactEl.classList.remove( 'woam-loading' );
+
+                if ( data.count === 0 ) {
+                    impactEl.innerHTML = '<p>No archived orders match the selected filters.</p>';
+                    return;
+                }
+
+                const actionLabel = action === 'delete' ? 'permanently deleted' : 'restored';
+
+                impactEl.innerHTML = `
+                    <div class="woam-impact-table">
+                        <div class="woam-impact-row woam-impact-row--total">
+                            <span>Orders to be ${ escHtml( actionLabel ) }</span>
+                            <strong>${ formatNumber( data.count ) }</strong>
+                        </div>
+                    </div>
+                    ${ action === 'delete'
+                        ? '<p class="woam-warn">⚠️ This action is permanent and cannot be undone.</p>'
+                        : '<p class="woam-info">Orders will be moved back to live WooCommerce tables.</p>'
+                    }`;
+
+            } catch ( err ) {
+                showError( impactEl, err.message );
+            }
+        } );
+
+        // --- Step 2 → Step 3 ---
+        document.getElementById( 'woam-archived-step2-next' ).addEventListener( 'click', () => {
+            setStep( container, 3 );
+        } );
+
+        // --- Back buttons ---
+        container.querySelectorAll( '[data-step-back]' ).forEach( btn => {
+            btn.addEventListener( 'click', () => {
+                setStep( container, parseInt( btn.dataset.stepBack ) );
+            } );
+        } );
+
+        // --- Start button ---
+        document.getElementById( 'woam-archived-start' ).addEventListener( 'click', async () => {
+            const action   = container.querySelector( 'input[name="archived_action"]:checked' )?.value ?? 'restore';
+            const dryRun   = document.getElementById( 'woam-archived-dry-run' ).checked;
+            const statuses = Array.from(
+                container.querySelectorAll( '#woam-archived-statuses input:checked' )
+            ).map( cb => cb.value );
+
+            // Confirmation gate for permanent delete only.
+            if ( action === 'delete' && ! dryRun ) {
+                const confirmVal = document.getElementById( 'woam-archived-confirm' ).value.trim();
+                if ( confirmVal !== 'DELETE' ) {
+                    alert( 'Please type DELETE to confirm permanent deletion.' );
+                    return;
+                }
+            }
+
+            const ajaxAction = action === 'delete'
+                ? 'hw_woam_delete_batch'
+                : 'hw_woam_restore_batch';
+
+            await runBatchLoop( {
+                action:     ajaxAction,
+                payload:    { statuses, dry_run: dryRun ? '1' : '' },
+                total:      state.totalOrders,
+                progressEl: document.getElementById( 'woam-archived-progress' ),
+                fillEl:     document.getElementById( 'woam-archived-progress-fill' ),
+                textEl:     document.getElementById( 'woam-archived-progress-text' ),
+                summaryEl:  document.getElementById( 'woam-archived-summary' ),
+                startBtn:   document.getElementById( 'woam-archived-start' ),
+            } );
+
+            // Reload the inventory card after batch completes.
+            await loadArchivedTab();
+        } );
+
+        // --- Integrity Check button ---
+        document.getElementById( 'woam-run-integrity-check' ).addEventListener( 'click', async () => {
+            const btn      = document.getElementById( 'woam-run-integrity-check' );
+            const resultEl = document.getElementById( 'woam-integrity-result' );
+
+            btn.disabled = true;
+            btn.textContent = 'Scanning…';
+            resultEl.innerHTML = '';
+
+            try {
+                const data = await woamPost( 'hw_woam_run_integrity_check' );
+
+                if ( data.is_healthy ) {
+                    resultEl.innerHTML = `
+                        <div class="woam-summary woam-summary--ok">
+                            <span class="dashicons dashicons-yes-alt woam-health-icon--ok"></span>
+                            <p>All ${ formatNumber( data.total_orphans === 0 ? 'archive' : '' ) } records are intact. No issues found.</p>
+                        </div>`;
+                } else {
+                    resultEl.innerHTML = `
+                        <div class="woam-summary woam-summary--warn">
+                            <span class="dashicons dashicons-warning woam-health-icon--warn"></span>
+                            <p><strong>${ formatNumber( data.total_orphans ) } orphaned rows found.</strong></p>
+                            <ul>
+                                ${ data.orphaned_meta      ? `<li>${ formatNumber( data.orphaned_meta ) } orphaned order meta rows</li>`      : '' }
+                                ${ data.orphaned_items     ? `<li>${ formatNumber( data.orphaned_items ) } orphaned order item rows</li>`     : '' }
+                                ${ data.orphaned_item_meta ? `<li>${ formatNumber( data.orphaned_item_meta ) } orphaned item meta rows</li>`  : '' }
+                                ${ data.orphaned_notes     ? `<li>${ formatNumber( data.orphaned_notes ) } orphaned order note rows</li>`    : '' }
+                                ${ data.orphaned_note_meta ? `<li>${ formatNumber( data.orphaned_note_meta ) } orphaned note meta rows</li>` : '' }
+                            </ul>
+                        </div>`;
+                }
+
+            } catch ( err ) {
+                resultEl.innerHTML = `<p class="woam-error">${ escHtml( err.message ) }</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Integrity Check';
+            }
+        } );
+    }
 } )();
