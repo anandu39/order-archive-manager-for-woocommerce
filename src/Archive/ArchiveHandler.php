@@ -183,7 +183,93 @@ class ArchiveHandler{
         return (bool) $active_subscription; 
     }
 
+    /**
+     * Verifies that all expected rows were copied into the archived tables
+     * before we delete anything from the live tables.
+     * 
+     * Count rows inside the archive tables for this order and compare against
+     * the source. If any count mismatches, throws an Exception - the calling
+     * transaction rolls back and the order remains untouched in live tables.
+     * 
+     * This is a defence-in-depth rollback method. Transactions already handle rollback
+     * on query failure, but this catches a rare case where a query is succeed but
+     * copies fewer rows than expected (eg. a silent partial insert).
+     * 
+     * @param int $order_id Order ID to verify.
+     * @throws \Exception If any archive row count doesn't match the source.
+     * @return void
+     *  
+    */
 
+    private function verify_archive_copy( int $order_id ): void {
+
+        $order_items_table = $this->wpdb->prefix . 'woocommerce_order_items';
+        $order_items_meta_table = $this->wpdb->prefix . 'woocommerce_order_itemmeta';
+
+        // Count Source row.
+        $source_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT (*) FROM {$this->wpdb->postmeta} WHERE post_id = %d", $order_id
+            )
+        );
+
+        $source_items = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT (*) FROM {$order_items_table} WHERE order_id = %d", $order_id
+            )
+        );
+
+        $source_item_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT (*) FROM {$order_items_meta_table} oim
+                INNER JOIN {$order_items_table} oi ON oim.order_item_id = oi.order_item_id
+                WHERE oi.order_id = %d", //phpcs:ignore WordPress.DB.PrepareSQL.InterpolateNotPrepared.
+                $order_id
+            )
+        );
+
+        // Count Archive rows.
+        $archive_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT (*) FROM {$this->table->orders_meta} WHERE post_id = %d", $order_id
+            )
+        );
+
+        $archive_items = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT (*) FROM {$this->table->order_items} WHERE order_id = %d", $order_id
+            )
+        );
+
+        $archive_item_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT (*) FROM {$this->table->order_items_meta} oim
+                INNER JOIN {$this->table->order_items} oi ON oim.order_item_id = oi.order_item_id
+                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+
+        // Verify Counts Match.
+
+        if( $archive_meta !== $source_meta ){
+            throw new \Exception(
+                "Archive verification failed for #{$order_id}: meta rows expected {$source_meta}, got {$archive_meta}."
+            );
+        }
+
+        if( $archive_items !== $source_items ){
+            throw new \Exception(
+                "Archive verification failed for #{$order_id}: items rows expected {$source_items}, got {$archive_items}."
+            );
+        }
+
+        if( $archive_item_meta !== $source_item_meta ){
+            throw new \Exception(
+                "Archive verification failed for #{$order_id}: item meta rows expected {$source_item_meta}, got {$archive_item_meta}."
+            );
+        }
+    }
 
     /**
      * 
@@ -207,7 +293,7 @@ class ArchiveHandler{
                 $this->logger->queue( $order_id, 'archived', 'skipped', 'Order is linked to an Subscription.' );
                 return false;
             }
-            
+
             // Copy — parent first, children after.
             $this->copy_order_post( $order_id );
             $this->copy_order_meta( $order_id );
@@ -215,6 +301,9 @@ class ArchiveHandler{
             $this->copy_order_items_meta( $order_id );
             $this->copy_order_notes( $order_id );
             $this->copy_order_notes_meta( $order_id );
+
+            // Verify all rows were copied before we delete anything from the source tabel.
+            $this->verify_archive_copy( $order_id );
 
             // Delete — children first, parent last.
             $this->delete_order_notes_meta( $order_id );
