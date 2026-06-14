@@ -1,25 +1,23 @@
 <?php
-
 /**
- * 
- * Archived Order Tab - Status breakdown inventory, restore and delete controls.
- * Populated and driven by woam-admin.js. This file is the structural skeleton only.
- * 
+ * Archived Orders tab — Inventory, Restore/Delete step flow, Integrity Check.
+ * Populated and driven by woam-admin.js. This file is the structural shell only.
+ *
  * @package HW\WOAM\Admin
-*/
+ */
 
 defined( 'ABSPATH' ) || exit;
 ?>
 
-<div class="woam-steps" data-mode="archived">
-    
-    <!-- Archive inventory - loaded on tab activation, Outside the step flow -->
-    <div class="woam-card woam-card--full" id="woam-archive-inventory-card">
-        <h2><?php esc_html_e( 'Archive Inventory', 'woo-order-archive-manager' ); ?></h2>
-        <div id="woam-archive-inventory" class="woam-loading">
-            <?php esc_html_e( 'Loading...', 'woo-order-archive-manager' ); ?>
-        </div>
+<!-- Archive Inventory — outside the step flow, always visible -->
+<div class="woam-card">
+    <h2><?php esc_html_e( 'Archive Inventory', 'woo-order-archive-manager' ); ?></h2>
+    <div id="woam-archive-inventory" class="woam-loading">
+        <?php esc_html_e( 'Loading…', 'woo-order-archive-manager' ); ?>
     </div>
+</div>
+
+<div class="woam-steps" data-mode="archived">
 
     <!-- Step Indicator -->
     <div class="woam-step-indicator">
@@ -30,29 +28,29 @@ defined( 'ABSPATH' ) || exit;
         <span class="woam-step-dot" data-step="3">3</span>
     </div>
 
-     <!-- Step 1 — Select Action -->
+    <!-- Step 1 — Select Action and Filters -->
     <div class="woam-step woam-step--active" data-step="1">
         <h2><?php esc_html_e( 'Step 1: Select Action', 'woo-order-archive-manager' ); ?></h2>
 
         <div class="woam-field-group">
-            <label><?php esc_html_e( 'What would you like to do with archived orders?', 'woo-order-archive-manager' ); ?></label>
-
+            <label><?php esc_html_e( 'What would you like to do?', 'woo-order-archive-manager' ); ?></label>
             <div class="woam-radio-group">
                 <label class="woam-radio">
                     <input type="radio" name="archived_action" value="restore" checked />
-                    <span><?php esc_html_e( 'Restore to live WooCommerce tables', 'woo-order-archive-manager' ); ?></span>
+                    <?php esc_html_e( 'Restore orders to WooCommerce', 'woo-order-archive-manager' ); ?>
                 </label>
                 <label class="woam-radio">
                     <input type="radio" name="archived_action" value="delete" />
-                    <span><?php esc_html_e( 'Permanently delete from archive', 'woo-order-archive-manager' ); ?></span>
+                    <?php esc_html_e( 'Permanently delete from archive', 'woo-order-archive-manager' ); ?>
                 </label>
             </div>
         </div>
 
         <div class="woam-field-group">
-            <label><?php esc_html_e( 'Filter by order status (optional)', 'woo-order-archive-manager' ); ?></label>
+            <label><?php esc_html_e( 'Filter by status (leave all unchecked for all statuses)', 'woo-order-archive-manager' ); ?></label>
+            <!-- Populated by JS from hw_woam_get_archive_breakdown -->
             <div class="woam-checkbox-grid" id="woam-archived-statuses">
-                <!-- Populated by JS from archive breakdown data -->
+                <p class="woam-loading"><?php esc_html_e( 'Loading statuses…', 'woo-order-archive-manager' ); ?></p>
             </div>
         </div>
 
@@ -83,16 +81,14 @@ defined( 'ABSPATH' ) || exit;
 
     <!-- Step 3 — Run Operation -->
     <div class="woam-step" data-step="3">
-        <h2 id="woam-archived-step3-title">
-            <?php esc_html_e( 'Step 3: Run Operation', 'woo-order-archive-manager' ); ?>
-        </h2>
+        <h2 id="woam-archived-step3-title"><?php esc_html_e( 'Step 3: Restore Orders', 'woo-order-archive-manager' ); ?></h2>
 
         <label class="woam-checkbox">
             <input type="checkbox" id="woam-archived-dry-run" checked />
             <?php esc_html_e( 'Dry run (no changes will be made)', 'woo-order-archive-manager' ); ?>
         </label>
 
-        <!-- Confirm input — JS shows/hides based on action (delete requires it, restore does not) -->
+        <!-- Confirm input — visible only for permanent delete, hidden by default -->
         <div class="woam-field-group" id="woam-archived-confirm-group" style="display:none;">
             <label for="woam-archived-confirm">
                 <?php
@@ -117,20 +113,19 @@ defined( 'ABSPATH' ) || exit;
                 <?php esc_html_e( 'Back', 'woo-order-archive-manager' ); ?>
             </button>
             <button type="button" class="woam-button woam-button--primary" id="woam-archived-start">
-                <?php esc_html_e( 'Start', 'woo-order-archive-manager' ); ?>
+                <?php esc_html_e( 'Start Restore', 'woo-order-archive-manager' ); ?>
             </button>
         </div>
-
-        <!-- Integrity Check — separate from the batch flow -->
-        <div class="woam-integrity-check">
-            <hr />
-            <h3><?php esc_html_e( 'Archive Integrity Check', 'woo-order-archive-manager' ); ?></h3>
-            <p><?php esc_html_e( 'Scans archive tables for orphaned rows. Should always pass — provided as a diagnostic tool.', 'woo-order-archive-manager' ); ?></p>
-            <button type="button" class="woam-button woam-button--secondary" id="woam-run-integrity-check">
-                <?php esc_html_e( 'Run Integrity Check', 'woo-order-archive-manager' ); ?>
-            </button>
-            <div id="woam-integrity-result"></div>
-        </div>
-
     </div>
+
+</div>
+
+<!-- Integrity Check — below the step flow -->
+<div class="woam-card woam-integrity-check">
+    <h2><?php esc_html_e( 'Archive Integrity Check', 'woo-order-archive-manager' ); ?></h2>
+    <p><?php esc_html_e( 'Scans the archive tables for orphaned rows — records with no matching parent order.', 'woo-order-archive-manager' ); ?></p>
+    <button type="button" class="woam-button woam-button--secondary" id="woam-run-integrity-check">
+        <?php esc_html_e( 'Run Integrity Check', 'woo-order-archive-manager' ); ?>
+    </button>
+    <div id="woam-integrity-result"></div>
 </div>

@@ -32,9 +32,9 @@ $order_statuses = function_exists ( 'wc_get_order_statuses' ) ? wc_get_order_sta
             <label><?php esc_html_e( 'Archive orders placed before', 'woo-order-archive-manager' ); ?></label>
 
             <div class="woam-presets">
-                <button type="button" class="woam-presets-btn" data-month="6"><?php esc_html_e( '6 months ago', 'woo-order-archive-manager' ); ?> </button>
-                <button type="button" class="woam-presets-btn" data-month="12"><?php esc_html_e( '1 year ago', 'woo-order-archive-manager' ); ?> </button>
-                <button type="button" class="woam-presets-btn" data-month="24"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?> </button>
+                <button type="button" class="woam-preset-btn" data-month="6"><?php esc_html_e( '6 months ago', 'woo-order-archive-manager' ); ?> </button>
+                <button type="button" class="woam-preset-btn" data-month="12"><?php esc_html_e( '1 year ago', 'woo-order-archive-manager' ); ?> </button>
+                <button type="button" class="woam-preset-btn" data-month="24"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?> </button>
             </div>
 
             <input type="date" id="woam-before-date" class="woam-input" />
