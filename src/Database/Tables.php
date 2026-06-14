@@ -84,6 +84,26 @@ class Tables{
     public readonly string $order_notes_meta;
 
     /**
+     * 
+     * Archived order refund table.
+     * Mirrors wp_post rows where post_type = 'shop_order_refund'.
+     * 
+     * @var string
+    */
+
+    public readonly string $order_refunds;
+
+    /**
+     * 
+     * Archived order refund meta table.
+     * Mirrors wp_postmeta rows for refund posts.
+     * 
+     * @var string
+    */
+
+    public readonly string $order_refunds_meta;
+
+    /**
      * Constructor.
      * Builds table names using the correct WordPress table prefix.
      * 
@@ -102,7 +122,8 @@ class Tables{
         $this->logs = $prefix . 'logs';
         $this->order_notes      = $prefix . 'order_notes';
         $this->order_notes_meta = $prefix . 'order_notes_meta';
-
+        $this->order_refunds = $prefix . 'order_refunds';
+        $this->order_refunds_meta = $prefix . 'order_refunds_meta';
     }
 
 }

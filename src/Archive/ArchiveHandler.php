@@ -301,6 +301,8 @@ class ArchiveHandler{
             $this->copy_order_items_meta( $order_id );
             $this->copy_order_notes( $order_id );
             $this->copy_order_notes_meta( $order_id );
+            $this->copy_order_refunds( $order_id );
+            $this->copy_order_refunds_meta( $order_id );
 
             // Verify all rows were copied before we delete anything from the source tabel.
             $this->verify_archive_copy( $order_id );
@@ -311,6 +313,8 @@ class ArchiveHandler{
             $this->delete_order_items_meta( $order_id );
             $this->delete_order_items( $order_id );
             $this->delete_order_meta( $order_id );
+            $this->delete_order_refunds_meta( $order_id );
+            $this->delete_order_refunds( $order_id );
             $this->delete_order_stats( $order_id );
             $this->delete_order_post( $order_id );
 
@@ -532,6 +536,76 @@ class ArchiveHandler{
     }
 
     /**
+     * 
+     * Copy all refund posts for an order into the order_refunds archive table.
+     * Refunds are shop_order_refunds posts with post_parent = order_id.
+     * 
+     * @param int $order_id Parent Order ID.
+     * @throws \Exception if the insert fails.
+     * @return void
+    */
+
+    private function copy_order_refunds( int $order_id ): void {
+        
+        $results = $this->wpdb->query(
+            $this->wpdb->prepare(
+                "INSERT IGNORE INTO {$this->tables->order_refunds}
+                (ID, post_author, post_date, post_date_gmt, post_content, post_title,
+                post_excerpt, post_status, comment_status, ping_status, post_password,
+                post_name, to_ping, pinged, post_modified, post_modified_gmt,
+                post_content_filtered, post_parent, guid, menu_order, post_type,
+                post_mime_type, comment_count)
+                SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title,
+                post_excerpt, post_status, comment_status, ping_status, post_password,
+                post_name, to_ping, pinged, post_modified, post_modified_gmt,
+                post_content_filtered, post_parent, guid, menu_order, post_type,
+                post_mime_type, comment_count
+                FROM {$this->wpbd->posts}
+                WHERE post_parent = %d
+                AND post_type = 'shop_order_refund'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+
+        if( false === $result ) {
+            throw new \Exception(
+                "Failed to copy order refunds for order #{$order_id}."
+            );
+        }
+    }
+
+    /**
+     * Copies all refund meta rows for an order's refund into archive.
+     * Joins against wp_posts to find refund IDs belonging to this order
+     * 
+     * @param int $order_id Parent order ID.
+     * @throws \Exception If the insert Fails.
+     * @return void 
+    */
+
+    private function copy_order_refunds_meta( int $order_id ): void {
+
+        $result = $this->wpdb->query(
+            $this->wpdb->prepare(
+                "INSERT IGNORE INTO {$this->tables->order_refunds_meta}
+                (meta_id, post_id, meta_key, meta_value)
+                SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value
+                FROM {$this->wpdb-postmeta} pm
+                INNER JOIN {$this->wpdb->posts} p ON pm.post_id = p.ID
+                WHERE p.post_parent = %d
+                AND p.post_type = 'shop_order_refund'", //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+
+        if( false === $result ) {
+            throw new \Exception(
+                "Failed to copy refund meta for order #{$order_id}."
+            );
+        }
+    }
+
+    /**
      * Deletes order note meta from wp_commentmeta.
      * Must run before delete_order_notes() since this depends on
      * wp_comments still containing the comment_post_ID = order_id link.
@@ -629,6 +703,46 @@ class ArchiveHandler{
         $this->wpdb->query(
             $this->wpdb->prepare(
                 "DELETE FROM {$this->wpdb->postmeta} WHERE post_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+    }
+
+    /**
+     * Deletes refund meta from wp_postmeta for all refunds of this order.
+     * Must run before delete_order_refunds().
+     * 
+     * @param int $order_id Parent order ID.
+     * @return void
+     * 
+    */
+
+    private function delete_order_refunds_meta( int $order_id ): void {
+        $this->wpdb->query(
+            $this->wpdb->prepare(
+                "DELETE pm FROM {$this->wpdb->postmeta} pm
+                INNER JOIN {$this->wpdb->posts} p ON pm.post_id = p.ID
+                WHERE p.post_parent = %d
+                AND p.post_type = 'shop_order_refund'", //phpcs:ignore Wordpress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+    }
+
+    /**
+     * Deletes refund posts from wp_posts for this order.
+     * 
+     * @param int $order_id Parent Order ID.
+     * @return void
+    */
+
+    private function delete_order_refunds( int $order_id ): void {
+        
+        $this->wpdb->query(
+            $this->wpdb->prepare(
+                "DELETE FROM {$this->wpdb->posts}
+                WHERE post_parent = %d
+                AND post_type = 'shop_order_refund'", //phpcs:ignore WordPress.DB.PreparedSQL.InterpolateNotPrepared
                 $order_id
             )
         );
