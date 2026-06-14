@@ -30,6 +30,8 @@ $tables = array(
 	$wpdb->prefix . 'woam_order_notes',
 	$wpdb->prefix . 'woam_order_notes_meta',
 	$wpdb->prefix . 'woam_logs',
+    $wpdb->prefix . 'woam_order_refunds',
+    $wpdb->prefix . 'woam_order_refunds_meta',
 );
 
 foreach ( $tables as $table ) {

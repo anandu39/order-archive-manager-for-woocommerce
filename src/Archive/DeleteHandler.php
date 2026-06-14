@@ -154,6 +154,8 @@ class DeleteHandler {
 			$this->delete_order_items_meta( $order_id );
 			$this->delete_order_items( $order_id );
 			$this->delete_order_meta( $order_id );
+            $this->delete_order_refunds_meta( $order_id );
+            $this->delete_order_refunds( $order_id );
 			$this->delete_order_post( $order_id );
 
 			if ( $dry_run ) {

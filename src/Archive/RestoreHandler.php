@@ -163,6 +163,10 @@ class RestoreHandler {
             $this->copy_order_refunds( $order_id );
             $this->copy_order_refunds_meta( $order_id );
 
+            // Verify all rows were restored before deleting from archive.
+            $this->verify_restore_copy( $order_id );
+
+
 			// Delete from archive — children first, parent last.
 			$this->delete_order_notes_meta( $order_id );
 			$this->delete_order_notes( $order_id );
@@ -429,6 +433,113 @@ class RestoreHandler {
 
         if ( false === $result ) {
             throw new \Exception( "Failed to restore refund meta for order #{$order_id}." );
+        }
+    }
+
+    /**
+     * Verifies that all expected rows were restored into the live tables
+     * before we delete anything from the archive tables.
+     *
+     * Counts rows in the live tables for this order and compares against
+     * what was in the archive. If any count mismatches, throws an Exception —
+     * the calling transaction rolls back and the archive remains untouched.
+     *
+     * @param int $order_id Order ID to verify.
+     * @throws \Exception If any restored row count does not match the archive.
+     * @return void
+     */
+    private function verify_restore_copy( int $order_id ): void {
+
+        $order_items_table      = $this->wpdb->prefix . 'woocommerce_order_items';
+        $order_items_meta_table = $this->wpdb->prefix . 'woocommerce_order_itemmeta';
+
+        // Count archive rows — what we expected to restore.
+        $archive_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->tables->orders_meta} WHERE post_id = %d",
+                $order_id
+            )
+        );
+
+        $archive_items = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->tables->order_items} WHERE order_id = %d",
+                $order_id
+            )
+        );
+
+        $archive_item_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->tables->order_items_meta} oim
+                INNER JOIN {$this->tables->order_items} oi ON oim.order_item_id = oi.order_item_id
+                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+
+        $archive_refunds = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->tables->order_refunds} WHERE post_parent = %d",
+                $order_id
+            )
+        );
+
+        // Count live rows — what was actually restored.
+        $live_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->wpdb->postmeta} WHERE post_id = %d",
+                $order_id
+            )
+        );
+
+        $live_items = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$order_items_table} WHERE order_id = %d",
+                $order_id
+            )
+        );
+
+        $live_item_meta = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$order_items_meta_table} oim
+                INNER JOIN {$order_items_table} oi ON oim.order_item_id = oi.order_item_id
+                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+
+        $live_refunds = (int) $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->wpdb->posts}
+                WHERE post_parent = %d
+                AND post_type = 'shop_order_refund'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $order_id
+            )
+        );
+
+        // Verify counts match.
+        if ( $live_meta !== $archive_meta ) {
+            throw new \Exception(
+                "Restore verification failed for order #{$order_id}: meta rows expected {$archive_meta}, got {$live_meta}."
+            );
+        }
+
+        if ( $live_items !== $archive_items ) {
+            throw new \Exception(
+                "Restore verification failed for order #{$order_id}: item rows expected {$archive_items}, got {$live_items}."
+            );
+        }
+
+        if ( $live_item_meta !== $archive_item_meta ) {
+            throw new \Exception(
+                "Restore verification failed for order #{$order_id}: item meta rows expected {$archive_item_meta}, got {$live_item_meta}."
+            );
+        }
+
+        if ( $live_refunds !== $archive_refunds ) {
+            throw new \Exception(
+                "Restore verification failed for order #{$order_id}: refund rows expected {$archive_refunds}, got {$live_refunds}."
+            );
         }
     }
 
