@@ -231,19 +231,19 @@ class ArchiveHandler{
         // Count Archive rows.
         $archive_meta = (int) $this->wpdb->get_var(
             $this->wpdb->prepare(
-                "SELECT COUNT (*) FROM {$this->table->orders_meta} WHERE post_id = %d", $order_id
+                "SELECT COUNT (*) FROM {$this->tables->orders_meta} WHERE post_id = %d", $order_id
             )
         );
 
         $archive_items = (int) $this->wpdb->get_var(
             $this->wpdb->prepare(
-                "SELECT COUNT (*) FROM {$this->table->order_items} WHERE order_id = %d", $order_id
+                "SELECT COUNT (*) FROM {$this->tables->order_items} WHERE order_id = %d", $order_id
             )
         );
 
         $archive_item_meta = (int) $this->wpdb->get_var(
             $this->wpdb->prepare(
-                "SELECT COUNT (*) FROM {$this->table->order_items_meta} oim
+                "SELECT COUNT (*) FROM {$this->tables->order_items_meta} oim
                 INNER JOIN {$this->table->order_items} oi ON oim.order_item_id = oi.order_item_id
                 WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                 $order_id
@@ -560,7 +560,7 @@ class ArchiveHandler{
                 post_name, to_ping, pinged, post_modified, post_modified_gmt,
                 post_content_filtered, post_parent, guid, menu_order, post_type,
                 post_mime_type, comment_count
-                FROM {$this->wpbd->posts}
+                FROM {$this->wpdb->posts}
                 WHERE post_parent = %d
                 AND post_type = 'shop_order_refund'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                 $order_id
@@ -590,7 +590,7 @@ class ArchiveHandler{
                 "INSERT IGNORE INTO {$this->tables->order_refunds_meta}
                 (meta_id, post_id, meta_key, meta_value)
                 SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value
-                FROM {$this->wpdb-postmeta} pm
+                FROM {$this->wpdb->postmeta} pm
                 INNER JOIN {$this->wpdb->posts} p ON pm.post_id = p.ID
                 WHERE p.post_parent = %d
                 AND p.post_type = 'shop_order_refund'", //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared

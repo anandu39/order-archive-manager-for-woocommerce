@@ -266,7 +266,7 @@ class Schema{
             post_status varchar(20) NOT NULL DEFAULT 'publish',
             comment_status varchar(20) NOT NULL DEFAULT 'open',
             post_password varchar(255) NOT NULL DEFAULT '',
-            post_name varcahr(200) NOT NULL DEFAULT '',
+            post_name varchar(200) NOT NULL DEFAULT '',
             to_ping text NOT NULL,
             pinged text NOT NULL,
             post_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
@@ -278,7 +278,7 @@ class Schema{
             post_type varchar(20) NOT NULL DEFAULT 'shop_order_refund',
             post_mime_type varchar(100) NOT NULL DEFAULT '',
             comment_count bigint(20) NOT NULL DEFAULT 0,
-            PRIMARY_KEY (ID),
+            PRIMARY KEY (ID),
             KEY post_parent (post_parent),
         ){$charset};";
     }
@@ -296,7 +296,7 @@ class Schema{
             post_id bigint(20) unsigned NOT NULL DEFAULT 0,
             meta_key varchar(255) DEFAULT NULL,
             meta_value longtext DEFAULT NULL,
-            PRIMARY_KEY (meta_id),
+            PRIMARY KEY (meta_id),
             KEY post_id (post_id),
             KEY meta_key (meta_key(191))
         ){$charset};";
