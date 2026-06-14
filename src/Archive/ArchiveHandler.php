@@ -127,6 +127,65 @@ class ArchiveHandler{
     }
 
     /**
+     * Checks whether an order is linked to an active subscription.
+     * Archiving subscription-linked orders would break WooCommerce Subscriptions
+     * billing chains - the renewal system queries wp_posts for parent order IDs.
+     * 
+     * Return true (and therefore blocks archiving) if:
+     * - The order has '_subscription_renewal' meta (it is a renewal order)
+     * - The order has '_subscription_resubscribe' meta (it is a resubscribe order)
+     * - Any active subscription exists with this order as its parent post
+     * 
+     * Only runs when WooCommerce Subscription is active. If the plugin is not installed,
+     * the action is skipped - no false positives.
+     *
+     * @param int $order_id Order to check.
+     * @return bool True if the subscription-linked and should be skipped. 
+    */
+
+    private function is_subscription_linked( int $order_id ): bool {
+
+        // If WooCommerce Subscription isn't active skip this completely.
+
+        if( !class_exists( 'WC_Subscriptions' ) ) {
+            return false;
+        }
+
+        //Check 1 - is the order a renewal or resubscribe order?
+
+        $renewal_meta = $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT meta_id FROM {$this->wpdb->postmeta}
+                WHERE post_id = %d
+                AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')
+                LIMIT 1",
+                $order_id
+            )
+        );
+
+        if( $renewal_meta ) {
+            return true;
+        }
+
+        // Check 2 - does any active subscription have this order as its parent?
+
+        $active_subscription = $this->wpdb->get_var(
+            $this->wpdb->prepare( 
+                "SELECT ID FROM {$this->wpdb->posts}
+                WHERE post_parent = %d
+                AND post_type = 'shop_subscription'
+                AND post_status IN ( 'wc-active','wc-pending-cancel' )
+                LIMIT 1",
+                $order_id
+            )
+        );
+
+        return (bool) $active_subscription; 
+    }
+
+
+
+    /**
      * 
      * Archives a single order by moving its data from live tables to archive tables, 
      * then deleting it from live tables. Runs inside a database transaction so
@@ -141,6 +200,14 @@ class ArchiveHandler{
         $this->wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
         try {
+
+            // Guard - skip subscription-linked order to protect billing chains.
+
+            if($this->is_subscription_linked( $order_id ) ) {
+                $this->logger->queue( $order_id, 'archived', 'skipped', 'Order is linked to an Subscription.' );
+                return false;
+            }
+            
             // Copy — parent first, children after.
             $this->copy_order_post( $order_id );
             $this->copy_order_meta( $order_id );
@@ -191,7 +258,7 @@ class ArchiveHandler{
 
         $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "INSERT INTO {$this->tables->orders}
+                "INSERT IGNORE INTO {$this->tables->orders}
                 (ID, post_author, post_date, post_date_gmt, post_content, post_title,
                 post_excerpt, post_status, comment_status, ping_status, post_password,
                 post_name, to_ping, pinged, post_modified, post_modified_gmt,
@@ -229,7 +296,7 @@ class ArchiveHandler{
 
         $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "INSERT INTO {$this->tables->orders_meta}
+                "INSERT IGNORE INTO {$this->tables->orders_meta}
                 (meta_id, post_id, meta_key, meta_value)
                 SELECT meta_id, post_id, meta_key, meta_value
                 FROM {$this->wpdb->postmeta}
@@ -258,7 +325,7 @@ class ArchiveHandler{
 
         $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "INSERT INTO {$this->tables->order_items}
+                "INSERT IGNORE INTO {$this->tables->order_items}
                 (order_item_id, order_item_name, order_item_type, order_id)
                 SELECT order_item_id, order_item_name, order_item_type, order_id
                 FROM {$order_items_table}
@@ -292,7 +359,7 @@ class ArchiveHandler{
 
         $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "INSERT INTO {$this->tables->order_items_meta}
+                "INSERT IGNORE INTO {$this->tables->order_items_meta}
                 (meta_id, order_item_id, meta_key, meta_value)
                 SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value
                 FROM {$order_items_meta_table} oim
@@ -323,7 +390,7 @@ class ArchiveHandler{
 
         $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "INSERT INTO {$this->tables->order_notes}
+                "INSERT IGNORE INTO {$this->tables->order_notes}
                 (comment_ID, comment_post_ID, comment_author, comment_author_email,
                 comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
                 comment_content, comment_karma, comment_approved, comment_agent,
@@ -358,7 +425,7 @@ class ArchiveHandler{
 
         $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "INSERT INTO {$this->tables->order_notes_meta}
+                "INSERT IGNORE INTO {$this->tables->order_notes_meta}
                 (meta_id, comment_id, meta_key, meta_value)
                 SELECT cm.meta_id, cm.comment_id, cm.meta_key, cm.meta_value
                 FROM {$this->wpdb->commentmeta} cm
