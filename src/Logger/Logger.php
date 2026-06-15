@@ -19,7 +19,6 @@ defined( 'ABSPATH' ) || exit;
  *
  * Class Logger
  */
-
 class Logger {
 	/**
 	 *
@@ -94,11 +93,19 @@ class Logger {
 	 *
 	 * @return int Number of log entries written to the database.
 	 */
+	/**
+	 * Flushes the internal log queue to the database via bulk insert.
+	 *
+	 * @return int Number of rows inserted.
+	 */
 	public function flush_queue(): int {
 
 		if ( empty( $this->log_queue ) ) {
 			return 0;
 		}
+
+		$db           = $this->wpdb;
+		$target_table = $this->tables->logs;
 
 		$values       = array();
 		$placeholders = array();
@@ -112,16 +119,20 @@ class Logger {
 			$values[]       = $log['created_at'];
 		}
 
-		$tables = $this->tables->logs;
+		// 1. Build the dynamic template string out into a standalone variable.
+		// Using %i ensures the table structure is natively escaped safely.
+		$query = 'INSERT INTO %i (order_id, action, status, message, created_at) VALUES ' . implode( ', ', $placeholders );
 
-		$sql = $this->wpdb->prepare(
-			"INSERT INTO `{$tables}` (order_id, action, status, message, created_at) VALUES "
-			. implode( ', ', $placeholders ),
-			...$values
-		);
+		// 2. Prepend the target table string to the front of the flat argument array.
+		$args = array_merge( array( $target_table ), $values );
 
-		$result          = $this->wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result          = $db->query( $prepared_sql );
 		$this->log_queue = array();
+
 		return is_int( $result ) ? $result : 0;
 	}
 
@@ -130,12 +141,12 @@ class Logger {
 	 * Used by the admin log viewer page.
 	 *
 	 * @param array<string, mixed> $args {
-	 *     Optional query arguments.
-	 *     @type int    $per_page  Rows per page. Default 20.
-	 *     @type int    $page      Page number. Default 1.
-	 *     @type string $action    Filter by action: 'archive', 'restore', 'delete'.
-	 *     @type string $status    Filter by status: 'success', 'error'.
-	 *     @type int    $order_id  Filter by specific order ID.
+	 * Optional query arguments.
+	 * @type int    $per_page  Rows per page. Default 20.
+	 * @type int    $page      Page number. Default 1.
+	 * @type string $action    Filter by action: 'archive', 'restore', 'delete'.
+	 * @type string $status    Filter by status: 'success', 'error'.
+	 * @type int    $order_id  Filter by specific order ID.
 	 * }
 	 * @return array<int, object>
 	 */
@@ -152,15 +163,27 @@ class Logger {
 		$args   = wp_parse_args( $args, $defaults );
 		$offset = ( $args['page'] - 1 ) * $args['per_page'];
 		$where  = $this->build_where_clause( $args );
-		$table  = $this->tables->logs;
 
-		$sql = $this->wpdb->prepare(
-			"SELECT * FROM `{$table}` {$where} ORDER BY created_at DESC LIMIT %d OFFSET %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$args['per_page'],
-			$offset
-		);
+		$db           = $this->wpdb;
+		$target_table = $this->tables->logs;
 
-		return $this->wpdb->get_results( $sql ) ?: array(); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// 1. Isolate and combine the static/dynamic elements safely.
+		// The %i handle isolates the dynamic schema lookup cleanly.
+		$query  = 'SELECT * FROM %i ' . $where . ' ORDER BY created_at DESC LIMIT %d OFFSET %d';
+		$params = array( $target_table, $args['per_page'], $offset );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $params );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$results = $db->get_results( $prepared_sql );
+
+		// 2. Structural normalization: swapping the shorthand syntax with a strict type-check fallback.
+		if ( empty( $results ) || ! is_array( $results ) ) {
+			return array();
+		}
+
+		return $results;
 	}
 
 	/**
@@ -189,13 +212,18 @@ class Logger {
 	 */
 	public function prune( int $days = 90 ): int {
 
-		$table  = $this->tables->logs;
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM `{$table}` WHERE created_at < DATE_SUB( NOW(), INTERVAL %d DAY )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$days
-			)
-		);
+		$db           = $this->wpdb;
+		$target_table = $this->tables->logs;
+
+		// Clean template using single quotes and native %i table identifier escaping.
+		$query = 'DELETE FROM %i WHERE created_at < DATE_SUB( NOW(), INTERVAL %d DAY )';
+		$args  = array( $target_table, $days );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		return is_int( $result ) ? $result : 0;
 	}
