@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Main plugin class file.
  *
@@ -7,7 +6,6 @@
  *
  * @package HW\WOAM
  */
-
 
 namespace HW\WOAM;
 
@@ -24,7 +22,6 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Class Plugin
  */
-
 class Plugin {
 
 	/**
@@ -112,6 +109,9 @@ class Plugin {
 
 	/**
 	 * Prevent unserializing the instance.
+	 *
+	 * @throws \Exception Direct block to prevent the cloning or restoration of a singleton instance.
+	 * @return void
 	 */
 	public function __wakeup() {
 		throw new \Exception( 'Cannot unserialize singleton.' );
