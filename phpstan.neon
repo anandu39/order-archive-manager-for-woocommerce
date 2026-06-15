@@ -1,0 +1,13 @@
+parameters:
+    level: 5
+
+    paths:
+        - src
+        - uninstall.php
+        - woo-order-archive-manager.php
+
+    excludePaths:
+        - vendor/*
+
+    bootstrapFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
