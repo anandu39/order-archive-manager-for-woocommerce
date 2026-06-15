@@ -1,11 +1,10 @@
 <?php
-
 /**
  *
  * Delete Handler
  *
- * permanently deletes orders from the archive tables.
- * No data is copied back to to the original WooCommerce tables. This is a one way process.
+ * Permanently deletes orders from the archive tables.
+ * no data is copied back to to the original WooCommerce tables. This is a one way process.
  * Each operation run inside a database transaction, to ensure data integrity.
  * If any step of the process fails, the transaction is rolled back, and no data is deleted.
  *
@@ -22,7 +21,6 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Class DeleteHandler
  */
-
 class DeleteHandler {
 	/**
 	 * WordPress database object.
@@ -59,7 +57,7 @@ class DeleteHandler {
 
 	/**
 	 *
-	 * constructor.
+	 * Constructor.
 	 *
 	 * @param \wpdb  $wpdb WordPress database object, injected for testability.
 	 * @param Tables $tables Table name definitions, injected for testability.
@@ -78,27 +76,36 @@ class DeleteHandler {
 	 * Used by the admin UI to show the order count before starting a permanent delete.
 	 *
 	 * @param array<int, string> $statuses Optional. Filter by order status (e.g. ['wc-completed']).
-	 *                                     Pass an empty array to count all archived orders.
+	 * Pass an empty array to count all archived orders.
 	 * @return int
 	 */
 	public function get_total_archived_orders( array $statuses = array() ): int {
 
+		$db    = $this->wpdb;
 		$table = $this->tables->orders;
 
+		// Branch 1: Empty statuses - count all archived records cleanly.
 		if ( empty( $statuses ) ) {
-			return (int) $this->wpdb->get_var(
-				"SELECT COUNT(*) FROM `{$table}`" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			);
+			$query        = 'SELECT COUNT(*) FROM %i';
+			$args         = array( $table );
+			$prepared_sql = $db->prepare( $query, $args );
+
+			return (int) $db->get_var( $prepared_sql );
 		}
 
+		// Branch 2: Handle status list logic safely.
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		$sql = $this->wpdb->prepare(
-			"SELECT COUNT(*) FROM `{$table}` WHERE post_status IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$statuses
-		);
+		// Assemble a flat query text layout before passing it into the engine.
+		$query = "SELECT COUNT(*) FROM %i WHERE post_status IN ({$placeholders})";
 
-		return (int) $this->wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// Combine table identifier and status strings sequentially into a single argument list.
+		$args = array_merge( array( $table ), $statuses );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		return (int) $db->get_var( $prepared_sql );
 	}
 
 	/**
@@ -179,7 +186,7 @@ class DeleteHandler {
 
 	/**
 	 * Deletes order note meta from the archive notes meta table.
-	 * Must run before delete_order_notes() — depends on woam_order_notes
+	 * Must run before delete_order_notes(). It depends on woam_order_notes
 	 * still containing the comment_post_ID link.
 	 *
 	 * @param int $order_id Order ID whose note meta should be deleted.
@@ -187,15 +194,19 @@ class DeleteHandler {
 	 */
 	private function delete_order_notes_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE onm FROM {$this->tables->order_notes_meta} onm
-                INNER JOIN {$this->tables->order_notes} on_
-                    ON onm.comment_id = on_.comment_ID
-                WHERE on_.comment_post_ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$target_tbl = $this->tables->order_notes_meta;
+		$source_tbl = $this->tables->order_notes;
+
+		// Clean join template using single quotes and isolated double %i identifier placeholders.
+		$query = 'DELETE onm FROM %i onm INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID WHERE on_.comment_post_ID = %d';
+		$args  = array( $target_tbl, $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -206,18 +217,23 @@ class DeleteHandler {
 	 */
 	private function delete_order_notes( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->order_notes}
-                WHERE comment_post_ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->order_notes;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE comment_post_ID = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
 	 * Deletes order item meta from the archive item meta table.
-	 * Must run before delete_order_items() — depends on woam_order_items
+	 * Must run before delete_order_items(). It depends on woam_order_items
 	 * still containing the order_id link.
 	 *
 	 * @param int $order_id Order ID whose item meta should be deleted.
@@ -225,15 +241,19 @@ class DeleteHandler {
 	 */
 	private function delete_order_items_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE oim FROM {$this->tables->order_items_meta} oim
-                INNER JOIN {$this->tables->order_items} oi
-                    ON oim.order_item_id = oi.order_item_id
-                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db            = $this->wpdb;
+		$target_tbl    = $this->tables->order_items_meta;
+		$src_items_tbl = $this->tables->order_items;
+
+		// Clean join layout template passing explicit double %i table mappings.
+		$query = 'DELETE oim FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
+		$args  = array( $target_tbl, $src_items_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -244,13 +264,18 @@ class DeleteHandler {
 	 */
 	private function delete_order_items( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->order_items}
-                WHERE order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->order_items;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE order_id = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -261,18 +286,23 @@ class DeleteHandler {
 	 */
 	private function delete_order_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->orders_meta}
-                WHERE post_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->orders_meta;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE post_id = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
 	 * Deletes refund meta from the archive refunds meta table.
-	 * Must run before delete_order_refunds() — depends on woam_order_refunds
+	 * Must run before delete_order_refunds(). It depends on woam_order_refunds
 	 * still containing the post_parent link.
 	 *
 	 * @param int $order_id Parent order ID.
@@ -280,14 +310,19 @@ class DeleteHandler {
 	 */
 	private function delete_order_refunds_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE rm FROM {$this->tables->order_refunds_meta} rm
-                INNER JOIN {$this->tables->order_refunds} r ON rm.post_id = r.ID
-                WHERE r.post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db            = $this->wpdb;
+		$target_tbl    = $this->tables->order_refunds_meta;
+		$src_posts_tbl = $this->tables->order_refunds;
+
+		// Clean join template layout using double %i identifier maps.
+		$query = 'DELETE rm FROM %i rm INNER JOIN %i r ON rm.post_id = r.ID WHERE r.post_parent = %d';
+		$args  = array( $target_tbl, $src_posts_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -298,18 +333,23 @@ class DeleteHandler {
 	 */
 	private function delete_order_refunds( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->order_refunds}
-                WHERE post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->order_refunds;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE post_parent = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
 	 * Deletes the order row from the archive orders table.
-	 * This is the final delete step — runs last because every other
+	 * This is the final delete step. It runs last because every other
 	 * archive table cleanup depends on this row still being present.
 	 *
 	 * @param int $order_id Order ID to delete from the archive.
@@ -317,13 +357,18 @@ class DeleteHandler {
 	 */
 	private function delete_order_post( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->orders}
-                WHERE ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->orders;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE ID = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
