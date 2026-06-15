@@ -1,16 +1,16 @@
 <?php
-
 /**
- * 
- * Archive order tab - Select filters, review impact, run the archive loop. 
+ * Archive order tab - Select filters, review impact, run the archive loop.
  * Populated and driven by woam-admin.js. This file is the structural shell only.
  * 
+ * Phase 3: Added real-time savings estimator
+ * 
  * @package HW\WOAM\Admin 
-*/
+ */
 
-defined ( 'ABSPATH' ) || exit;
+defined( 'ABSPATH' ) || exit;
 
-$order_statuses = function_exists ( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : [];
+$order_statuses = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array();
 ?>
 
 <div class="woam-steps" data-mode="archive">
@@ -24,6 +24,35 @@ $order_statuses = function_exists ( 'wc_get_order_statuses' ) ? wc_get_order_sta
         <span class="woam-step-dot" data-step="3">3</span>
     </div>
 
+    <!-- Real-Time Savings Estimator (NEW - Phase 3) -->
+    <div id="woam-real-time-estimate" class="woam-real-time-estimate" style="display: none;">
+        <div class="woam-estimate-card">
+            <div class="woam-estimate-header">
+                <span class="dashicons dashicons-chart-line"></span>
+                <span><?php esc_html_e( 'Potential Savings', 'woo-order-archive-manager' ); ?></span>
+            </div>
+            <div class="woam-estimate-content">
+                <div class="woam-estimate-orders">
+                    <span class="woam-estimate-number" id="woam-estimate-order-count">0</span>
+                    <span class="woam-estimate-label"><?php esc_html_e( 'orders', 'woo-order-archive-manager' ); ?></span>
+                </div>
+                <div class="woam-estimate-divider"></div>
+                <div class="woam-estimate-space">
+                    <span class="woam-estimate-number" id="woam-estimate-space-saved">0 MB</span>
+                    <span class="woam-estimate-label"><?php esc_html_e( 'estimated space freed', 'woo-order-archive-manager' ); ?></span>
+                </div>
+            </div>
+            <div class="woam-estimate-footer" id="woam-estimate-detail" style="display: none;">
+                <span class="dashicons dashicons-info-outline"></span>
+                <span id="woam-estimate-breakdown"></span>
+            </div>
+            <div class="woam-estimate-loading" id="woam-estimate-loading" style="display: none;">
+                <span class="dashicons dashicons-update spin"></span>
+                <span><?php esc_html_e( 'Calculating...', 'woo-order-archive-manager' ); ?></span>
+            </div>
+        </div>
+    </div>
+
     <!-- Step 1 - Select Orders -->
     <div class="woam-step woam-step--active" data-step="1">
         <h2><?php esc_html_e( 'Step 1: Select Orders', 'woo-order-archive-manager' ); ?></h2>
@@ -32,9 +61,10 @@ $order_statuses = function_exists ( 'wc_get_order_statuses' ) ? wc_get_order_sta
             <label><?php esc_html_e( 'Archive orders placed before', 'woo-order-archive-manager' ); ?></label>
 
             <div class="woam-presets">
-                <button type="button" class="woam-preset-btn" data-month="6"><?php esc_html_e( '6 months ago', 'woo-order-archive-manager' ); ?> </button>
-                <button type="button" class="woam-preset-btn" data-month="12"><?php esc_html_e( '1 year ago', 'woo-order-archive-manager' ); ?> </button>
-                <button type="button" class="woam-preset-btn" data-month="24"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?> </button>
+                <button type="button" class="woam-preset-btn" data-month="3"><?php esc_html_e( '3 months ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-month="6"><?php esc_html_e( '6 months ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-month="12"><?php esc_html_e( '1 year ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-month="24"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?></button>
             </div>
 
             <input type="date" id="woam-before-date" class="woam-input" />
@@ -44,14 +74,27 @@ $order_statuses = function_exists ( 'wc_get_order_statuses' ) ? wc_get_order_sta
             <label><?php esc_html_e( 'Order statuses to include', 'woo-order-archive-manager' ); ?></label>
 
             <div class="woam-checkbox-grid" id="woam-archive-statuses">
-                <?php foreach( $order_statuses as $status_key => $status_label) : ?>
+                <?php foreach ( $order_statuses as $status_key => $status_label ) : ?>
                 <label class="woam-checkbox">
-                    <input type="checkbox" name="archive_statuses[]" value="<?php echo esc_attr( $status_key ); ?>"/>
+                    <input type="checkbox" name="archive_statuses[]" value="<?php echo esc_attr( $status_key ); ?>" />
                     <?php echo esc_html( $status_label ); ?>
                 </label>
                 <?php endforeach; ?>
             </div>
         </div>
+
+        <!-- Select/Deselect All buttons (NEW) -->
+        <div class="woam-bulk-actions">
+            <button type="button" class="woam-bulk-btn" data-select-all-statuses>
+                <span class="dashicons dashicons-yes-alt"></span>
+                <?php esc_html_e( 'Select All', 'woo-order-archive-manager' ); ?>
+            </button>
+            <button type="button" class="woam-bulk-btn" data-deselect-all-statuses>
+                <span class="dashicons dashicons-no-alt"></span>
+                <?php esc_html_e( 'Deselect All', 'woo-order-archive-manager' ); ?>
+            </button>
+        </div>
+
         <div class="woam-step-actions">
             <button type="button" class="woam-button woam-button--primary" id="woam-archive-step1-next">
                 <?php esc_html_e( 'Review Impact', 'woo-order-archive-manager' ); ?>

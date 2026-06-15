@@ -665,6 +665,191 @@ Phase 2: Overview Tab Redesign with Dashicons
     color: #2271b1;
 }
 
+/*--------------------------------------------------------------
+Phase 3: Real-Time Savings Estimator Styles
+--------------------------------------------------------------*/
+
+/* Real-Time Estimate Card */
+.woam-real-time-estimate {
+    margin-bottom: 24px;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.woam-estimate-card {
+    background: linear-gradient(135deg, #e8f0fe 0%, #f0f6fa 100%);
+    border-radius: 12px;
+    padding: 20px 24px;
+    border: 1px solid #c8d9e8;
+}
+
+.woam-estimate-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.woam-estimate-header .dashicons {
+    color: #7f54b3;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.woam-estimate-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 24px;
+    margin-bottom: 12px;
+}
+
+.woam-estimate-orders,
+.woam-estimate-space {
+    text-align: center;
+    flex: 1;
+}
+
+.woam-estimate-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: #7f54b3;
+    line-height: 1.2;
+    display: block;
+}
+
+.woam-estimate-label {
+    font-size: 12px;
+    color: #646970;
+    margin-top: 4px;
+    display: block;
+}
+
+.woam-estimate-divider {
+    width: 1px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.woam-estimate-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 12px;
+    margin-top: 8px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    font-size: 12px;
+    color: #646970;
+}
+
+.woam-estimate-footer .dashicons {
+    color: #7f54b3;
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+
+.woam-estimate-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    color: #646970;
+    font-size: 13px;
+}
+
+.woam-estimate-loading .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Spin animation for loading icon */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Bulk Actions Buttons */
+.woam-bulk-actions {
+    display: flex;
+    gap: 12px;
+    margin: 16px 0 20px;
+}
+
+.woam-bulk-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    background: #f0f0f1;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    color: #1d2327;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.woam-bulk-btn:hover {
+    background: #e0e0e0;
+    border-color: #c0c0c0;
+}
+
+.woam-bulk-btn .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+
+/* Loading state for estimate */
+.woam-estimate-number--loading {
+    position: relative;
+    display: inline-block;
+    min-width: 60px;
+}
+
+.woam-estimate-number--loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -20px;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #7f54b3;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    transform: translateY(-50%);
+}
+
+
 /* Responsive */
 @media (max-width: 900px) {
 	.woam-grid--2col {
@@ -717,4 +902,21 @@ Phase 2: Overview Tab Redesign with Dashicons
 	.woam-timeline-date {
 		min-width: auto;
 	}
+    .woam-estimate-content {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .woam-estimate-divider {
+        width: 40px;
+        height: 1px;
+    }
+    
+    .woam-estimate-number {
+        font-size: 28px;
+    }
+    
+    .woam-bulk-actions {
+        flex-wrap: wrap;
+    }
 }

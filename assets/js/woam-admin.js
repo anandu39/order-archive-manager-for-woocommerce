@@ -490,16 +490,125 @@
      */
 
     /**
-     * Wires up all interactivity for Tab 2 — Archive Orders
+     * ============================================================
+     * REAL-TIME SAVINGS ESTIMATION
+     * ============================================================
      */
-    function initArchiveTab() {
+
+    /**
+     * Debounce utility to prevent too many API calls
+     */
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    /**
+     * Fetches real-time savings estimate based on current filters
+     */
+    async function fetchRealTimeEstimate() {
+        const beforeDate = document.getElementById('woam-before-date').value;
+        const statuses = Array.from(
+            document.querySelectorAll('#woam-archive-statuses input:checked')
+        ).map(cb => cb.value);
+
+        // Don't show estimate if no date or no statuses selected
+        if (!beforeDate || statuses.length === 0) {
+            const estimateContainer = document.getElementById('woam-real-time-estimate');
+            if (estimateContainer) {
+                estimateContainer.style.display = 'none';
+            }
+            return;
+        }
+
+        const estimateContainer = document.getElementById('woam-real-time-estimate');
+        const loadingEl = document.getElementById('woam-estimate-loading');
+        const contentEl = document.querySelector('.woam-estimate-content');
+        const footerEl = document.getElementById('woam-estimate-detail');
+
+        // Show estimate container with loading state
+        estimateContainer.style.display = 'block';
+        loadingEl.style.display = 'flex';
+        contentEl.style.opacity = '0.5';
+
+        try {
+            const data = await woamPost('hw_woam_get_savings_estimate', {
+                before_date: beforeDate,
+                statuses,
+            });
+
+            // Update UI with real data
+            document.getElementById('woam-estimate-order-count').textContent = formatNumber(data.order_count);
+            document.getElementById('woam-estimate-space-saved').textContent = data.estimated_size;
+
+            if (data.order_count > 0) {
+                footerEl.style.display = 'flex';
+                document.getElementById('woam-estimate-breakdown').innerHTML = 
+                    `${formatNumber(data.row_counts.order_meta)} meta rows, ${formatNumber(data.row_counts.order_items)} items, ${formatNumber(data.row_counts.order_notes)} notes`;
+            } else {
+                footerEl.style.display = 'none';
+            }
+
+        } catch (err) {
+            console.error('Failed to fetch estimate:', err);
+            document.getElementById('woam-estimate-order-count').textContent = '0';
+            document.getElementById('woam-estimate-space-saved').textContent = '0 MB';
+            document.getElementById('woam-estimate-detail').style.display = 'none';
+        } finally {
+            loadingEl.style.display = 'none';
+            contentEl.style.opacity = '1';
+        }
+    }
+
+    // Create debounced version for real-time updates
+    const debouncedFetchEstimate = debounce(fetchRealTimeEstimate, 500);
+
+    /**
+     * Sets up real-time estimate listeners on filter changes
+     */
+    function initRealTimeEstimate() {
+        const beforeDateInput = document.getElementById('woam-before-date');
+        const statusCheckboxes = document.querySelectorAll('#woam-archive-statuses input');
+
+        if (!beforeDateInput) return;
+
+        // Listen to date changes
+        beforeDateInput.addEventListener('change', () => {
+            debouncedFetchEstimate();
+        });
+
+        // Listen to status checkbox changes
+        statusCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                debouncedFetchEstimate();
+            });
+        });
+
+        // Also trigger on preset button clicks (handled in existing code, but we need to also trigger estimate)
+        // We'll add a mutation observer or enhance the preset button handler
+    }
+
+    /**
+     * Enhanced preset button handler with estimate refresh
+     */
+    function enhancePresetButtons() {
         const container = document.querySelector('.woam-steps[data-mode="archive"]');
         if (!container) return;
 
-        // Preset buttons
         container.querySelectorAll('.woam-preset-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const months = parseInt(btn.dataset.month);
+            // Remove existing listeners to avoid duplicates
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.addEventListener('click', () => {
+                const months = parseInt(newBtn.dataset.month);
                 const d = new Date();
                 d.setMonth(d.getMonth() - months);
 
@@ -507,14 +616,100 @@
                 const mm = String(d.getMonth() + 1).padStart(2, '0');
                 const dd = String(d.getDate()).padStart(2, '0');
 
-                document.getElementById('woam-before-date').value = `${yyyy}-${mm}-${dd}`;
+                const dateInput = document.getElementById('woam-before-date');
+                dateInput.value = `${yyyy}-${mm}-${dd}`;
 
                 container.querySelectorAll('.woam-preset-btn').forEach(b => b.classList.remove('woam-preset-btn--active'));
-                btn.classList.add('woam-preset-btn--active');
+                newBtn.classList.add('woam-preset-btn--active');
+
+                // Trigger real-time estimate
+                debouncedFetchEstimate();
             });
         });
+    }
 
-        // Step 1 → Step 2: load savings estimate
+    /**
+     * Bulk select/deselect functionality
+     */
+    function initBulkSelectors() {
+        const selectAllBtn = document.querySelector('[data-select-all-statuses]');
+        const deselectAllBtn = document.querySelector('[data-deselect-all-statuses]');
+
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('#woam-archive-statuses input');
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                });
+                debouncedFetchEstimate();
+            });
+        }
+
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('#woam-archive-statuses input');
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                });
+                debouncedFetchEstimate();
+            });
+        }
+    }
+
+    /**
+     * Apply recommendation from Overview tab (if exists)
+     */
+    function applyRecommendationFromStorage() {
+        const savedRec = sessionStorage.getItem('woam_recommendation');
+        if (savedRec) {
+            try {
+                const rec = JSON.parse(savedRec);
+                const dateInput = document.getElementById('woam-before-date');
+                if (dateInput && rec.date) {
+                    dateInput.value = rec.date;
+                }
+                
+                if (rec.statuses && rec.statuses.length) {
+                    const checkboxes = document.querySelectorAll('#woam-archive-statuses input');
+                    checkboxes.forEach(cb => {
+                        cb.checked = rec.statuses.includes(cb.value);
+                    });
+                }
+                
+                // Clear after applying
+                sessionStorage.removeItem('woam_recommendation');
+                
+                // Trigger estimate
+                setTimeout(() => {
+                    debouncedFetchEstimate();
+                }, 100);
+            } catch (e) {
+                console.error('Failed to apply recommendation:', e);
+            }
+        }
+    }
+
+    /**
+     * Wires up all interactivity for Tab 2 — Archive Orders
+     * Phase 3: Added real-time estimation and bulk selectors
+     */
+    function initArchiveTab() {
+        const container = document.querySelector('.woam-steps[data-mode="archive"]');
+        if (!container) return;
+
+        // Phase 3: Enhanced preset buttons with real-time estimate
+        enhancePresetButtons();
+
+        // Phase 3: Initialize real-time estimate listeners
+        initRealTimeEstimate();
+
+        // Phase 3: Initialize bulk selectors
+        initBulkSelectors();
+
+        // Phase 3: Apply recommendation from Overview tab
+        applyRecommendationFromStorage();
+
+        // Step 1 → Step 2: load savings estimate (full detailed view)
         document.getElementById('woam-archive-step1-next').addEventListener('click', async () => {
             const beforeDate = document.getElementById('woam-before-date').value;
             const statuses = Array.from(
@@ -549,6 +744,7 @@
                     return;
                 }
 
+                // Cache total for progress bar.
                 state.totalOrders = data.order_count;
 
                 impactEl.classList.remove('woam-loading');
@@ -602,6 +798,7 @@
             const dryRun = document.getElementById('woam-archive-dry-run').checked;
             const confirmVal = document.getElementById('woam-archive-confirm').value.trim();
 
+            // Confirmation gate — skip for dry runs.
             if (!dryRun && confirmVal !== 'ARCHIVE') {
                 alert('Please type ARCHIVE to confirm.');
                 return;
