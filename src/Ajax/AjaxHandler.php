@@ -100,6 +100,7 @@ class AjaxHandler {
 		add_action( 'wp_ajax_hw_woam_get_lifetime_stats', array( $this, 'handle_get_lifetime_stats' ) );
 		add_action( 'wp_ajax_hw_woam_get_recommendations', array( $this, 'handle_get_recommendations' ) );
 		add_action( 'wp_ajax_hw_woam_get_archive_readiness', array( $this, 'handle_get_archive_readiness' ) );
+		add_action( 'wp_ajax_hw_woam_get_growth_forecast', array( $this, 'handle_get_growth_forecast' ) );
 	}
 
 	/**
@@ -140,6 +141,49 @@ class AjaxHandler {
 	public function handle_get_archive_readiness(): void {
 		$this->verify_request();
 		wp_send_json_success( $this->analytics_handler->get_archive_readiness() );
+	}
+
+	/**
+	 * Handle get growth forecast request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_growth_forecast(): void {
+		$this->verify_request();
+		
+		global $wpdb;
+		
+		// Get current database size
+		$current_size = $this->get_db_stats_array()['total_bytes'] ?? 0;
+		
+		// Get monthly growth rate from analytics handler
+		$monthly_growth_mb = $this->analytics_handler->get_monthly_growth_rate_mb();
+		
+		// Calculate projections
+		$projected_6_months_bytes = $current_size + ( $monthly_growth_mb * 6 * 1024 * 1024 );
+		$projected_12_months_bytes = $current_size + ( $monthly_growth_mb * 12 * 1024 * 1024 );
+		
+		// Get historical data for chart
+		$history = get_option( 'hw_woam_growth_history', array() );
+		$historical_data = array();
+		
+		foreach ( $history as $date => $size ) {
+			$historical_data[] = array(
+				'date' => $date,
+				'size_mb' => round( $size / ( 1024 * 1024 ), 1 ),
+			);
+		}
+		
+		wp_send_json_success( array(
+			'current_size_bytes' => $current_size,
+			'current_size_formatted' => $this->format_bytes( $current_size ),
+			'monthly_growth_rate_mb' => $monthly_growth_mb,
+			'projected_6_months_bytes' => $projected_6_months_bytes,
+			'projected_6_months_formatted' => $this->format_bytes( $projected_6_months_bytes ),
+			'projected_12_months_bytes' => $projected_12_months_bytes,
+			'projected_12_months_formatted' => $this->format_bytes( $projected_12_months_bytes ),
+			'historical_data' => $historical_data,
+		) );
 	}
 
 	/**

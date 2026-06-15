@@ -485,32 +485,91 @@
     }
 
     /**
-     * Loads growth forecast
+     * Loads growth forecast with chart
      */
     async function loadGrowthForecast() {
         const container = document.getElementById('woam-growth-forecast');
         if (!container) return;
 
         try {
+            const data = await woamPost('hw_woam_get_growth_forecast');
+            
+            // Build historical chart bars
+            let historyHtml = '';
+            if (data.historical_data && data.historical_data.length > 0) {
+                const maxSize = Math.max(...data.historical_data.map(d => d.size_mb), data.monthly_growth_rate_mb * 12);
+                
+                historyHtml = '<div class="woam-history-chart"><div class="woam-chart-bars">';
+                
+                data.historical_data.slice(-6).forEach(point => {
+                    const height = maxSize > 0 ? (point.size_mb / maxSize) * 60 : 0;
+                    historyHtml += `
+                        <div class="woam-chart-bar" style="height: ${height}px">
+                            <span class="woam-chart-value">${point.size_mb} MB</span>
+                        </div>
+                    `;
+                });
+                
+                historyHtml += '</div><div class="woam-chart-labels">';
+                data.historical_data.slice(-6).forEach(point => {
+                    historyHtml += `<span>${point.date.substring(5)}</span>`;
+                });
+                historyHtml += '</div></div>';
+            }
+            
             const html = `
                 <div class="woam-forecast-current">
-                    <div class="woam-forecast-number">~${Math.floor(Math.random() * 400) + 100} MB</div>
-                    <div class="woam-forecast-label">Projected Growth Next 12 Months</div>
+                    <div class="woam-forecast-number">${escHtml(data.current_size_formatted)}</div>
+                    <div class="woam-forecast-label">Current Database Size</div>
                 </div>
                 <div class="woam-forecast-trend">
-                    <span class="woam-trend-up dashicons dashicons-arrow-up-alt"></span>
-                    <span>+${Math.floor(Math.random() * 25) + 10}% current growth rate</span>
+                    <span class="dashicons dashicons-chart-line"></span>
+                    <span>Growing at ${data.monthly_growth_rate_mb} MB per month</span>
+                </div>
+                ${historyHtml}
+                <div class="woam-forecast-projections">
+                    <div class="woam-projection">
+                        <span class="dashicons dashicons-calendar-alt"></span>
+                        <span>In 6 months:</span>
+                        <strong>${escHtml(data.projected_6_months_formatted)}</strong>
+                    </div>
+                    <div class="woam-projection">
+                        <span class="dashicons dashicons-calendar-alt"></span>
+                        <span>In 12 months:</span>
+                        <strong>${escHtml(data.projected_12_months_formatted)}</strong>
+                    </div>
                 </div>
                 <div class="woam-forecast-action">
-                    <p>Archive old orders now to reduce growth by up to 70%</p>
+                    <button type="button" class="woam-button woam-button--secondary" data-archive-suggested>
+                        <span class="dashicons dashicons-archive"></span>
+                        Archive old orders to reduce growth
+                    </button>
                 </div>
             `;
 
             container.classList.remove('woam-loading');
             container.innerHTML = html;
+            
+            // Attach event listener to the archive button
+            const archiveBtn = container.querySelector('[data-archive-suggested]');
+            if (archiveBtn) {
+                archiveBtn.addEventListener('click', () => {
+                    document.querySelector('.woam-tab[data-tab="archive"]').click();
+                });
+            }
 
         } catch (err) {
-            showError(container, err.message);
+            // Fallback to simple display if API fails
+            container.classList.remove('woam-loading');
+            container.innerHTML = `
+                <div class="woam-forecast-current">
+                    <div class="woam-forecast-number">Loading...</div>
+                    <div class="woam-forecast-label">Current Database Size</div>
+                </div>
+                <div class="woam-forecast-action">
+                    <p>Archive old orders now to reduce database growth.</p>
+                </div>
+            `;
         }
     }
 

@@ -551,6 +551,85 @@ Phase 2: Overview Tab Redesign with Dashicons
 	font-size: 13px;
 	color: var(--woam-muted);
 }
+/* Growth Forecast Chart */
+.woam-history-chart {
+    margin: 16px 0;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.woam-chart-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 8px;
+    height: 80px;
+    margin-bottom: 8px;
+}
+
+.woam-chart-bar {
+    flex: 1;
+    background: linear-gradient(180deg, #7f54b3 0%, #9b6bc1 100%);
+    border-radius: 4px 4px 0 0;
+    min-width: 30px;
+    position: relative;
+    transition: height 0.3s ease;
+}
+
+.woam-chart-value {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: #646970;
+    white-space: nowrap;
+}
+
+.woam-chart-labels {
+    display: flex;
+    justify-content: space-around;
+    gap: 8px;
+    font-size: 10px;
+    color: #646970;
+    text-align: center;
+}
+
+.woam-chart-labels span {
+    flex: 1;
+    min-width: 30px;
+}
+
+.woam-forecast-projections {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+    padding: 12px;
+    background: #e8f0fe;
+    border-radius: 8px;
+}
+
+.woam-projection {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.woam-projection .dashicons {
+    color: #7f54b3;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.woam-projection strong {
+    margin-left: auto;
+    font-size: 14px;
+    color: #1d2327;
+}
 
 /* Storage Bars */
 .woam-chart-container {

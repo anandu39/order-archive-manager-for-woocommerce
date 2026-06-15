@@ -323,6 +323,15 @@ class AnalyticsHandler {
 	}
 
 	/**
+	 * Get monthly growth rate in MB.
+	 *
+	 * @return int
+	 */
+	public function get_monthly_growth_rate_mb(): int {
+		return $this->calculate_monthly_growth_rate();
+	}
+
+	/**
 	 * Returns the current archive readiness status.
 	 *
 	 * @return array<string, mixed>
