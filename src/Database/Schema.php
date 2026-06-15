@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Database Schema management
  *
@@ -16,7 +15,6 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Class Schema
  */
-
 class Schema {
 
 	/**
@@ -280,7 +278,7 @@ class Schema {
 	/**
 	 * SQL for the order refund meta table archive.
 	 *
-	 * @param string $charset Charchter set and collation
+	 * @param string $charset Charchter set and collation.
 	 * @return string
 	 */
 	private function get_order_refunds_meta_table_sql( string $charset ): string {
