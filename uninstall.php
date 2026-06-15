@@ -40,9 +40,9 @@ foreach ( $tables as $table ) {
 
 // Delete plugin options.
 
-delete_options( 'hw_woam_db_version' );
+delete_option( 'hw_woam_db_version' );
 
 // Delete transients.
 
-delete_options( 'hw_woam_job_running' );
-delete_options( 'hw_woam_order_date_range' );
+delete_option( 'hw_woam_job_running' );
+delete_option( 'hw_woam_order_date_range' );
