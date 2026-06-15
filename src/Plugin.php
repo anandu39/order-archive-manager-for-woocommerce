@@ -15,6 +15,7 @@ use HW\WOAM\Archive\RestoreHandler;
 use HW\WOAM\Archive\DeleteHandler;
 use HW\WOAM\Ajax\AjaxHandler;
 use HW\WOAM\Admin\AdminPage;
+use HW\WOAM\Admin\Onboarding;
 
 
 defined( 'ABSPATH' ) || exit;
@@ -94,6 +95,14 @@ class Plugin {
 	private AdminPage $admin_page;
 
 	/**
+	 * Onboarding Page
+	 *
+	 * @var Onboarding
+	 */
+
+	private Onboarding $onboarding;
+
+	/**
 	 * Constructor.
 	 * Private to prevent direct instantiation.
 	 * Use Plugin::instance() instead.
@@ -170,11 +179,13 @@ class Plugin {
 			$this->delete_handler,
 			$this->analytics_handler
 		);
+		$this->onboarding        = new Onboarding();
 
 		if ( is_admin() ) {
 			$this->admin_page = new AdminPage();
 			$this->admin_page->register_hooks();
 			$this->ajax_handler->register_hooks();
+			$this->onboarding->register_hooks();
 		}
 
 		$this->schema->maybe_upgrade();

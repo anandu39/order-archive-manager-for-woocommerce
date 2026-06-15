@@ -113,7 +113,7 @@ class AdminPage {
 	public function admin_render_page(): void {
 		?>
 
-		<div class="wrap woam-wrap">
+		<div class="wrap woam-wrap woam-onboarding-ready">
 			<div class="woam-header">
 				<h1> <?php esc_html_e( 'Order Archive Manager', 'woo-order-archive-manager' ); ?></h1>
 				<p> <?php esc_html_e( 'Archive, restore and manager your WooCommerce data', 'woo-order-archive-manager' ); ?></p>
@@ -184,4 +184,3 @@ class AdminPage {
 		<?php
 	}
 }
-

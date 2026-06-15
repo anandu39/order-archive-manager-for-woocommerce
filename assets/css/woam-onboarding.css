@@ -1,0 +1,402 @@
+/*--------------------------------------------------------------
+Phase 5: Onboarding Wizard Styles
+--------------------------------------------------------------*/
+
+/* Overlay */
+.woam-onboarding-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Modal Container */
+.woam-onboarding-modal {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    animation: slideUp 0.4s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Modal Header */
+.woam-onboarding-header {
+    background: linear-gradient(135deg, #7f54b3 0%, #9b6bc1 100%);
+    padding: 32px 32px 24px;
+    text-align: center;
+    color: #ffffff;
+}
+
+.woam-onboarding-header .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+}
+
+.woam-onboarding-header h2 {
+    color: #ffffff;
+    margin: 0 0 8px;
+    font-size: 24px;
+}
+
+.woam-onboarding-header p {
+    color: rgba(255, 255, 255, 0.9);
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Modal Body */
+.woam-onboarding-body {
+    padding: 32px;
+    min-height: 300px;
+}
+
+/* Step Indicator */
+.woam-onboarding-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 32px;
+}
+
+.woam-onboarding-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.woam-step-number {
+    width: 32px;
+    height: 32px;
+    background: #f0f0f1;
+    border: 2px solid #e0e0e0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: #646970;
+    margin-bottom: 8px;
+    transition: all 0.3s;
+}
+
+.woam-step-number.active {
+    background: #7f54b3;
+    border-color: #7f54b3;
+    color: #ffffff;
+}
+
+.woam-step-number.completed {
+    background: #2ea64a;
+    border-color: #2ea64a;
+    color: #ffffff;
+}
+
+.woam-step-number.completed::after {
+    content: '✓';
+    font-size: 16px;
+}
+
+.woam-step-label {
+    font-size: 11px;
+    color: #646970;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.woam-step-label.active {
+    color: #7f54b3;
+}
+
+.woam-step-connector {
+    width: 80px;
+    height: 2px;
+    background: #e0e0e0;
+    margin: 0 8px;
+    margin-bottom: 28px;
+}
+
+/* Step Content */
+.woam-onboarding-step-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.woam-onboarding-step-content.active {
+    display: block;
+}
+
+/* Scan Animation */
+.woam-scan-animation {
+    text-align: center;
+    padding: 20px;
+}
+
+.woam-scan-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: #7f54b3;
+    margin-bottom: 20px;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.95); }
+}
+
+.woam-scan-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: #1d2327;
+    margin-bottom: 8px;
+}
+
+.woam-scan-subtext {
+    font-size: 13px;
+    color: #646970;
+}
+
+/* Progress Bar */
+.woam-scan-progress {
+    margin-top: 24px;
+}
+
+.woam-scan-progress-bar {
+    height: 4px;
+    background: #e8e8e8;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.woam-scan-progress-fill {
+    height: 100%;
+    background: #7f54b3;
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.woam-scan-progress-text {
+    font-size: 11px;
+    color: #646970;
+    text-align: center;
+}
+
+/* Statistics Display */
+.woam-scan-stats {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.woam-scan-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #e8e8e8;
+}
+
+.woam-scan-stat-row:last-child {
+    border-bottom: none;
+}
+
+.woam-scan-stat-label {
+    font-size: 13px;
+    color: #646970;
+}
+
+.woam-scan-stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #7f54b3;
+}
+
+.woam-scan-highlight {
+    background: #e8f0fe;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+    text-align: center;
+}
+
+.woam-scan-highlight .dashicons {
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
+    color: #7f54b3;
+    margin-bottom: 8px;
+}
+
+.woam-scan-highlight .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2ea64a;
+    display: block;
+}
+
+/* Modal Footer */
+.woam-onboarding-footer {
+    padding: 20px 32px;
+    background: #f8f9fa;
+    border-top: 1px solid #e8e8e8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.woam-onboarding-footer .woam-button {
+    min-width: 100px;
+}
+
+.woam-onboarding-footer .woam-button--secondary {
+    background: transparent;
+}
+
+.woam-skip-link {
+    color: #646970;
+    text-decoration: none;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.woam-skip-link:hover {
+    color: #d63638;
+}
+
+/* Tooltip/Guided Tour */
+.woam-guided-tour {
+    position: fixed;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: 16px 20px;
+    max-width: 280px;
+    z-index: 100001;
+    border: 1px solid #e0e0e0;
+}
+
+.woam-guided-tour::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #ffffff;
+    border-left: 1px solid #e0e0e0;
+    border-top: 1px solid #e0e0e0;
+    transform: rotate(45deg);
+}
+
+.woam-guided-tour[data-position="top"]::before {
+    bottom: -7px;
+    left: 20px;
+    top: auto;
+}
+
+.woam-guided-tour[data-position="bottom"]::before {
+    top: -7px;
+    left: 20px;
+}
+
+.woam-guided-tour h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.woam-guided-tour p {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: #646970;
+}
+
+.woam-guided-tour-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.woam-guided-tour-btn {
+    padding: 4px 12px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+}
+
+.woam-guided-tour-btn-next {
+    background: #7f54b3;
+    color: #ffffff;
+}
+
+.woam-guided-tour-btn-dismiss {
+    background: transparent;
+    color: #646970;
+}
+
+/* Highlight effect for guided tour */
+.woam-tour-highlight {
+    position: relative;
+    z-index: 100002;
+    box-shadow: 0 0 0 4px #7f54b3, 0 0 0 8px rgba(127, 84, 179, 0.2);
+    border-radius: 4px;
+    transition: box-shadow 0.2s;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .woam-onboarding-modal {
+        width: 95%;
+        max-height: 85vh;
+    }
+    
+    .woam-onboarding-header {
+        padding: 24px;
+    }
+    
+    .woam-onboarding-body {
+        padding: 24px;
+    }
+    
+    .woam-onboarding-footer {
+        padding: 16px 24px;
+    }
+    
+    .woam-step-connector {
+        width: 40px;
+    }
+}
