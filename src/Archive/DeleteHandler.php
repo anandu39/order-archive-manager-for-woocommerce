@@ -154,8 +154,8 @@ class DeleteHandler {
 			$this->delete_order_items_meta( $order_id );
 			$this->delete_order_items( $order_id );
 			$this->delete_order_meta( $order_id );
-            $this->delete_order_refunds_meta( $order_id );
-            $this->delete_order_refunds( $order_id );
+			$this->delete_order_refunds_meta( $order_id );
+			$this->delete_order_refunds( $order_id );
 			$this->delete_order_post( $order_id );
 
 			if ( $dry_run ) {
@@ -270,42 +270,42 @@ class DeleteHandler {
 		);
 	}
 
-    /**
-     * Deletes refund meta from the archive refunds meta table.
-     * Must run before delete_order_refunds() — depends on woam_order_refunds
-     * still containing the post_parent link.
-     *
-     * @param int $order_id Parent order ID.
-     * @return void
-     */
-    private function delete_order_refunds_meta( int $order_id ): void {
+	/**
+	 * Deletes refund meta from the archive refunds meta table.
+	 * Must run before delete_order_refunds() — depends on woam_order_refunds
+	 * still containing the post_parent link.
+	 *
+	 * @param int $order_id Parent order ID.
+	 * @return void
+	 */
+	private function delete_order_refunds_meta( int $order_id ): void {
 
-        $this->wpdb->query(
-            $this->wpdb->prepare(
-                "DELETE rm FROM {$this->tables->order_refunds_meta} rm
+		$this->wpdb->query(
+			$this->wpdb->prepare(
+				"DELETE rm FROM {$this->tables->order_refunds_meta} rm
                 INNER JOIN {$this->tables->order_refunds} r ON rm.post_id = r.ID
                 WHERE r.post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $order_id
-            )
-        );
-    }
+				$order_id
+			)
+		);
+	}
 
-    /**
-     * Deletes refund posts from the archive refunds table.
-     *
-     * @param int $order_id Parent order ID.
-     * @return void
-     */
-    private function delete_order_refunds( int $order_id ): void {
+	/**
+	 * Deletes refund posts from the archive refunds table.
+	 *
+	 * @param int $order_id Parent order ID.
+	 * @return void
+	 */
+	private function delete_order_refunds( int $order_id ): void {
 
-        $this->wpdb->query(
-            $this->wpdb->prepare(
-                "DELETE FROM {$this->tables->order_refunds}
+		$this->wpdb->query(
+			$this->wpdb->prepare(
+				"DELETE FROM {$this->tables->order_refunds}
                 WHERE post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $order_id
-            )
-        );
-    }
+				$order_id
+			)
+		);
+	}
 
 	/**
 	 * Deletes the order row from the archive orders table.

@@ -313,7 +313,7 @@ class ArchiveHandler {
 			$this->delete_order_refunds_meta( $order_id );
 			$this->delete_order_refunds( $order_id );
 			$this->delete_order_stats( $order_id );
-            $this->delete_order_analytics( $order_id );
+			$this->delete_order_analytics( $order_id );
 			$this->delete_order_post( $order_id );
 
 			if ( $dry_run ) {
@@ -758,106 +758,106 @@ class ArchiveHandler {
 		);
 	}
 
-    /**
-     * Deletes WooCommerce Analytics lookup table rows for this order.
-     * These tables are regenerable from order data — they are cache/reporting
-     * tables, not source-of-truth. Deleting them on archive prevents ghost
-     * entries appearing in WooCommerce Analytics reports.
-     *
-     * Tables cleaned:
-     * - wc_order_product_lookup  — one row per line item
-     * - wc_order_coupon_lookup   — one row per coupon used
-     * - wc_order_tax_lookup      — one row per tax line
-     * - wc_customer_lookup       — only if customer has no remaining live orders
-     *
-     * Each table is checked for existence before querying — safe on older
-     * WooCommerce versions that may not have all tables.
-     *
-     * @param int $order_id Order ID whose analytics rows should be removed.
-     * @return void
-     */
-    private function delete_order_analytics( int $order_id ): void {
+	/**
+	 * Deletes WooCommerce Analytics lookup table rows for this order.
+	 * These tables are regenerable from order data — they are cache/reporting
+	 * tables, not source-of-truth. Deleting them on archive prevents ghost
+	 * entries appearing in WooCommerce Analytics reports.
+	 *
+	 * Tables cleaned:
+	 * - wc_order_product_lookup  — one row per line item
+	 * - wc_order_coupon_lookup   — one row per coupon used
+	 * - wc_order_tax_lookup      — one row per tax line
+	 * - wc_customer_lookup       — only if customer has no remaining live orders
+	 *
+	 * Each table is checked for existence before querying — safe on older
+	 * WooCommerce versions that may not have all tables.
+	 *
+	 * @param int $order_id Order ID whose analytics rows should be removed.
+	 * @return void
+	 */
+	private function delete_order_analytics( int $order_id ): void {
 
-        $analytics_tables = [
-            'wc_order_product_lookup' => 'order_id',
-            'wc_order_coupon_lookup'  => 'order_id',
-            'wc_order_tax_lookup'     => 'order_id',
-        ];
+		$analytics_tables = array(
+			'wc_order_product_lookup' => 'order_id',
+			'wc_order_coupon_lookup'  => 'order_id',
+			'wc_order_tax_lookup'     => 'order_id',
+		);
 
-        foreach ( $analytics_tables as $table_suffix => $column ) {
-            $table = $this->wpdb->prefix . $table_suffix;
+		foreach ( $analytics_tables as $table_suffix => $column ) {
+			$table = $this->wpdb->prefix . $table_suffix;
 
-            // Skip if table doesn't exist — older WooCommerce installs.
-            if ( $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-                continue;
-            }
+			// Skip if table doesn't exist — older WooCommerce installs.
+			if ( $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				continue;
+			}
 
-            $this->wpdb->query(
-                $this->wpdb->prepare(
-                    "DELETE FROM `{$table}` WHERE `{$column}` = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    $order_id
-                )
-            );
-        }
+			$this->wpdb->query(
+				$this->wpdb->prepare(
+					"DELETE FROM `{$table}` WHERE `{$column}` = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$order_id
+				)
+			);
+		}
 
-        // Customer lookup — only remove if this customer has no other live orders.
-        // Removing prematurely would break customer lifetime value reporting.
-        $this->maybe_delete_customer_lookup( $order_id );
-    }
+		// Customer lookup — only remove if this customer has no other live orders.
+		// Removing prematurely would break customer lifetime value reporting.
+		$this->maybe_delete_customer_lookup( $order_id );
+	}
 
-    /**
-     * Removes the customer lookup row only if the customer has no remaining
-     * live orders after this one is archived.
-     *
-     * wc_customer_lookup is per-customer not per-order — one row per customer.
-     * Deleting it removes the customer from Analytics entirely, which is only
-     * correct if this was their only order. If they have other live orders,
-     * the row must remain.
-     *
-     * @param int $order_id Order being archived.
-     * @return void
-     */
-    private function maybe_delete_customer_lookup( int $order_id ): void {
+	/**
+	 * Removes the customer lookup row only if the customer has no remaining
+	 * live orders after this one is archived.
+	 *
+	 * wc_customer_lookup is per-customer not per-order — one row per customer.
+	 * Deleting it removes the customer from Analytics entirely, which is only
+	 * correct if this was their only order. If they have other live orders,
+	 * the row must remain.
+	 *
+	 * @param int $order_id Order being archived.
+	 * @return void
+	 */
+	private function maybe_delete_customer_lookup( int $order_id ): void {
 
-        $customer_lookup = $this->wpdb->prefix . 'wc_customer_lookup';
+		$customer_lookup = $this->wpdb->prefix . 'wc_customer_lookup';
 
-        if ( $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $customer_lookup ) ) !== $customer_lookup ) {
-            return;
-        }
+		if ( $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $customer_lookup ) ) !== $customer_lookup ) {
+			return;
+		}
 
-        // Find the customer_id for this order.
-        $customer_id = (int) $this->wpdb->get_var(
-            $this->wpdb->prepare(
-                "SELECT customer_id FROM `{$customer_lookup}` WHERE order_id = %d LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $order_id
-            )
-        );
+		// Find the customer_id for this order.
+		$customer_id = (int) $this->wpdb->get_var(
+			$this->wpdb->prepare(
+				"SELECT customer_id FROM `{$customer_lookup}` WHERE order_id = %d LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$order_id
+			)
+		);
 
-        if ( ! $customer_id ) {
-            return;
-        }
+		if ( ! $customer_id ) {
+			return;
+		}
 
-        // Count remaining live orders for this customer.
-        $remaining_orders = (int) $this->wpdb->get_var(
-            $this->wpdb->prepare(
-                "SELECT COUNT(*) FROM `{$customer_lookup}`
+		// Count remaining live orders for this customer.
+		$remaining_orders = (int) $this->wpdb->get_var(
+			$this->wpdb->prepare(
+				"SELECT COUNT(*) FROM `{$customer_lookup}`
                 WHERE customer_id = %d
                 AND order_id != %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $customer_id,
-                $order_id
-            )
-        );
+				$customer_id,
+				$order_id
+			)
+		);
 
-        // Only delete if this was their only order.
-        if ( 0 === $remaining_orders ) {
-            $this->wpdb->query(
-                $this->wpdb->prepare(
-                    "DELETE FROM `{$customer_lookup}` WHERE customer_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    $customer_id
-                )
-            );
-        }
-    }
+		// Only delete if this was their only order.
+		if ( 0 === $remaining_orders ) {
+			$this->wpdb->query(
+				$this->wpdb->prepare(
+					"DELETE FROM `{$customer_lookup}` WHERE customer_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$customer_id
+				)
+			);
+		}
+	}
 
 	/**
 	 * Deletes the order post from wp_posts.

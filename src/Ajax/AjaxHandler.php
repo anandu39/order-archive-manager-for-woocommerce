@@ -1,5 +1,4 @@
 <?php
-
 /**
  *
  * Ajax Handler
@@ -22,7 +21,6 @@ defined( 'ABSPATH' ) || exit;
  *
  * Class AjaxHandler
  */
-
 class AjaxHandler {
 
 	/**
@@ -160,6 +158,7 @@ class AjaxHandler {
 
 		$this->verify_request();
 
+        // phpcs:disable WordPress.Security.NonceVerification.Missing
 		$mode = sanitize_key( $_POST['mode'] ?? '' );
 
 		$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
@@ -175,6 +174,7 @@ class AjaxHandler {
 			default            => 0,
 		};
 
+        // phpcs:disable WordPress.Security.NonceVerification.Missing
 		wp_send_json_success( array( 'count' => $count ) );
 	}
 
@@ -191,6 +191,7 @@ class AjaxHandler {
 		$this->acquire_lock();
 
 		try {
+            // phpcs:disable WordPress.Security.NonceVerification.Missing
 			$before_date = sanitize_text_field( wp_unslash( $_POST['before_date'] ?? '' ) );
 
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
@@ -198,6 +199,7 @@ class AjaxHandler {
 				: array();
 
 			$dry_run = ! empty( $_POST['dry_run'] );
+            // phpcs:disable WordPress.Security.NonceVerification.Missing
 
 			$result = $this->archive_handler->process_batch( $before_date, $statuses, $dry_run );
 
@@ -221,11 +223,13 @@ class AjaxHandler {
 		$this->acquire_lock();
 
 		try {
+            // phpcs:disable WordPress.Security.NonceVerification.Missing
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 				? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
 				: array();
 
 			$dry_run = ! empty( $_POST['dry_run'] );
+            // phpcs:disable WordPress.Security.NonceVerification.Missing
 
 			$result = $this->restore_handler->process_restore_batch( $statuses, $dry_run );
 
@@ -249,11 +253,13 @@ class AjaxHandler {
 		$this->acquire_lock();
 
 		try {
+            // phpcs:disable WordPress.Security.NonceVerification.Missing
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 				? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
 				: array();
 
 			$dry_run = ! empty( $_POST['dry_run'] );
+            // phpcs:disable WordPress.Security.NonceVerification.Missing
 
 			$result = $this->delete_handler->process_delete_batch( $statuses, $dry_run );
 
@@ -292,31 +298,36 @@ class AjaxHandler {
 
 		$placeholders = implode( ', ', array_fill( 0, count( $table_names ), '%s' ) );
 
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT TABLE_NAME, DATA_LENGTH, INDEX_LENGTH
+		// Move the query generation out or keep it clean by removing the inline ignore comment.
+		$query = "SELECT TABLE_NAME, DATA_LENGTH, INDEX_LENGTH
                 FROM information_schema.TABLES
                 WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_values( $table_names )
-			)
+                AND TABLE_NAME IN ({$placeholders})";
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare( $query, array_values( $table_names ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
 
 		$stats       = array();
 		$total_bytes = 0;
 
 		foreach ( $rows as $row ) {
-			$size_bytes   = (int) $row->DATA_LENGTH + (int) $row->INDEX_LENGTH;
+			$row_array    = (array) $row;
+			$data_length  = (int) ( $row_array['DATA_LENGTH'] ?? 0 );
+			$index_length = (int) ( $row_array['INDEX_LENGTH'] ?? 0 );
+			$size_bytes   = $data_length + $index_length;
 			$total_bytes += $size_bytes;
 
-			// Flip the map so we can look up the friendly key by table name.
-			$key = array_search( $row->TABLE_NAME, $table_names, true );
+			$table_name = $row_array['TABLE_NAME'] ?? '';
+			$key        = array_search( $table_name, $table_names, true );
 
-			$stats[ $key ] = array(
-				'table'     => $row->TABLE_NAME,
-				'bytes'     => $size_bytes,
-				'formatted' => $this->format_bytes( $size_bytes ),
-			);
+			if ( false !== $key ) {
+				$stats[ $key ] = array(
+					'table'     => $table_name,
+					'bytes'     => $size_bytes,
+					'formatted' => $this->format_bytes( $size_bytes ),
+				);
+			}
 		}
 
 		wp_send_json_success(
@@ -364,17 +375,31 @@ class AjaxHandler {
 	 *
 	 * @return void
 	 */
+	/**
+	 * Returns an estimated space saving for archiving orders matching the given filters.
+	 * Used by the Archive tab Step 2 (Review Impact) before the user starts a batch.
+	 *
+	 * Counts matching order rows and their related records, then multiplies
+	 * by average row size from information_schema to produce a byte estimate.
+	 * This is an approximation — actual savings may vary.
+	 *
+	 * Expects POST: nonce, before_date, statuses[]
+	 *
+	 * @return void
+	 */
 	public function handle_get_savings_estimate(): void {
 
 		$this->verify_request();
 
 		global $wpdb;
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
 		$before_date = sanitize_text_field( wp_unslash( $_POST['before_date'] ?? '' ) );
 
 		$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 			? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
 			: array();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 		if ( empty( $before_date ) || empty( $statuses ) ) {
 			wp_send_json_success(
@@ -388,15 +413,25 @@ class AjaxHandler {
 			return;
 		}
 
+		// Setup localized variables for standard WooCommerce tables.
+		$order_items_table      = $wpdb->prefix . 'woocommerce_order_items';
+		$order_items_meta_table = $wpdb->prefix . 'woocommerce_order_itemmeta';
+
+		// Generate the dynamic placeholder string for the SQL IN clause (e.g., "%s, %s, %s").
+		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+
+		// ---------------------------------------------------------------------
 		// Step 1 — count matching orders.
-		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-		$order_count  = (int) $wpdb->get_var(
+		// ---------------------------------------------------------------------
+		$query_orders = "SELECT COUNT(*) FROM %i 
+                        WHERE post_type = 'shop_order' 
+                        AND post_date < %s 
+                        AND post_status IN ({$in_placeholders})";
+
+		$order_count = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts}
-                WHERE post_type = 'shop_order'
-                AND post_date < %s
-                AND post_status IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( array( $before_date ), $statuses )
+				$query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $wpdb->posts, $before_date ), $statuses )
 			)
 		);
 
@@ -412,55 +447,67 @@ class AjaxHandler {
 			return;
 		}
 
+		// ---------------------------------------------------------------------
 		// Step 2 — count related rows across all six tables.
-		$order_items_table      = $wpdb->prefix . 'woocommerce_order_items';
-		$order_items_meta_table = $wpdb->prefix . 'woocommerce_order_itemmeta';
+		// ---------------------------------------------------------------------
+
+		// Fix for Meta Rows.
+		$query_meta = "SELECT COUNT(*) FROM %i pm
+                      INNER JOIN %i p ON pm.post_id = p.ID
+                      WHERE p.post_type = 'shop_order'
+                      AND p.post_date < %s
+                      AND p.post_status IN ({$in_placeholders})";
 
 		$meta_count = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->postmeta} pm
-                INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
-                WHERE p.post_type = 'shop_order'
-                AND p.post_date < %s
-                AND p.post_status IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( array( $before_date ), $statuses )
+				$query_meta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $wpdb->postmeta, $wpdb->posts, $before_date ), $statuses )
 			)
 		);
+
+		// Fix for Order Items Rows.
+		$query_items = "SELECT COUNT(*) FROM %i oi
+                       INNER JOIN %i p ON oi.order_id = p.ID
+                       WHERE p.post_type = 'shop_order'
+                       AND p.post_date < %s
+                       AND p.post_status IN ({$in_placeholders})";
 
 		$items_count = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$order_items_table} oi
-                INNER JOIN {$wpdb->posts} p ON oi.order_id = p.ID
-                WHERE p.post_type = 'shop_order'
-                AND p.post_date < %s
-                AND p.post_status IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( array( $before_date ), $statuses )
+				$query_items, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $order_items_table, $wpdb->posts, $before_date ), $statuses )
 			)
 		);
+
+		// Fix for Order Item Meta Rows.
+		$query_itemmeta = "SELECT COUNT(*) FROM %i oim
+                          INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+                          INNER JOIN %i p ON oi.order_id = p.ID
+                          WHERE p.post_type = 'shop_order'
+                          AND p.post_date < %s
+                          AND p.post_status IN ({$in_placeholders})";
 
 		$itemmeta_count = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$order_items_meta_table} oim
-                INNER JOIN {$order_items_table} oi ON oim.order_item_id = oi.order_item_id
-                INNER JOIN {$wpdb->posts} p ON oi.order_id = p.ID
-                WHERE p.post_type = 'shop_order'
-                AND p.post_date < %s
-                AND p.post_status IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( array( $before_date ), $statuses )
+				$query_itemmeta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $order_items_meta_table, $order_items_table, $wpdb->posts, $before_date ), $statuses )
 			)
 		);
 
+		// Fix for Order Notes/Comments Rows.
+		$query_notes = "SELECT COUNT(*) FROM %i
+                       WHERE comment_post_ID IN (
+                           SELECT ID FROM %i
+                           WHERE post_type = 'shop_order'
+                           AND post_date < %s
+                           AND post_status IN ({$in_placeholders})
+                       )
+                       AND comment_type IN ('order_note', 'order_note_private')";
+
 		$notes_count = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->comments}
-                WHERE comment_post_ID IN (
-                    SELECT ID FROM {$wpdb->posts}
-                    WHERE post_type = 'shop_order'
-                    AND post_date < %s
-                    AND post_status IN ({$placeholders})
-                )
-                AND comment_type IN ('order_note', 'order_note_private')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( array( $before_date ), $statuses )
+				$query_notes, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $wpdb->comments, $wpdb->posts, $before_date ), $statuses )
 			)
 		);
 
@@ -472,7 +519,9 @@ class AjaxHandler {
 			'order_notes' => $notes_count,
 		);
 
+		// ---------------------------------------------------------------------
 		// Step 3 — get average row sizes from information_schema.
+		// ---------------------------------------------------------------------
 		$table_list = array(
 			'orders'      => $wpdb->posts,
 			'order_meta'  => $wpdb->postmeta,
@@ -497,7 +546,9 @@ class AjaxHandler {
 			$avg_row_sizes[ $key ] = $avg;
 		}
 
+		// ---------------------------------------------------------------------
 		// Step 4 — estimate total bytes freed.
+		// ---------------------------------------------------------------------
 		$estimated_bytes = 0;
 
 		foreach ( $row_counts as $key => $count ) {
@@ -637,13 +688,13 @@ class AjaxHandler {
                     DATE(created_at)  AS activity_date,
                     action,
                     COUNT(*)          AS order_count
-                FROM `{$logs_table}`
+                FROM %i
                 WHERE status = %s
                 AND action   IN ('archive', 'restore', 'delete')
                 GROUP BY DATE(created_at), action
                 ORDER BY activity_date DESC, action ASC
-                LIMIT 5", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				'success'
+                LIMIT 5",
+				array( $logs_table, 'success' )
 			)
 		);
 
@@ -681,11 +732,15 @@ class AjaxHandler {
 
 		$orders_table = $wpdb->prefix . 'woam_orders';
 
+		// Pass the literal string using single quotes to fix the WPCS formatting error.
 		$rows = $wpdb->get_results(
-			"SELECT post_status, COUNT(*) AS order_count
-            FROM `{$orders_table}`
-            GROUP BY post_status
-            ORDER BY order_count DESC" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				'SELECT post_status, COUNT(*) AS order_count
+                FROM %i
+                GROUP BY post_status
+                ORDER BY order_count DESC',
+				$orders_table
+			)
 		);
 
 		$breakdown   = array();
@@ -742,6 +797,17 @@ class AjaxHandler {
 	 *
 	 * @return void
 	 */
+	/**
+	 * Checks the archive tables for orphaned rows — meta, items, or notes
+	 * that reference an order ID no longer present in woam_orders.
+	 *
+	 * This should normally return zero orphans since all operations run
+	 * inside transactions. Provided as a diagnostic tool for the admin.
+	 *
+	 * Expects POST: nonce
+	 *
+	 * @return void
+	 */
 	public function handle_run_integrity_check(): void {
 
 		$this->verify_request();
@@ -755,34 +821,59 @@ class AjaxHandler {
 		$order_notes_table      = $wpdb->prefix . 'woam_order_notes';
 		$order_notes_meta_table = $wpdb->prefix . 'woam_order_notes_meta';
 
+		// 1. Check orphaned metadata.
 		$orphaned_meta = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$orders_meta_table}` om
-            LEFT JOIN `{$orders_table}` o ON om.post_id = o.ID
-            WHERE o.ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i om
+                LEFT JOIN %i o ON om.post_id = o.ID
+                WHERE o.ID IS NULL',
+				$orders_meta_table,
+				$orders_table
+			)
 		);
 
+		// 2. Check orphaned order items.
 		$orphaned_items = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$order_items_table}` oi
-            LEFT JOIN `{$orders_table}` o ON oi.order_id = o.ID
-            WHERE o.ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i oi
+                LEFT JOIN %i o ON oi.order_id = o.ID
+                WHERE o.ID IS NULL',
+				$order_items_table,
+				$orders_table
+			)
 		);
 
+		// 3. Check orphaned order item meta.
 		$orphaned_item_meta = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$order_items_meta_table}` oim
-            LEFT JOIN `{$order_items_table}` oi ON oim.order_item_id = oi.order_item_id
-            WHERE oi.order_item_id IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i oim
+                LEFT JOIN %i oi ON oim.order_item_id = oi.order_item_id
+                WHERE oi.order_item_id IS NULL',
+				$order_items_meta_table,
+				$order_items_table
+			)
 		);
 
+		// 4. Check orphaned order notes (comments).
 		$orphaned_notes = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$order_notes_table}` on_
-            LEFT JOIN `{$orders_table}` o ON on_.comment_post_ID = o.ID
-            WHERE o.ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i on_
+                LEFT JOIN %i o ON on_.comment_post_ID = o.ID
+                WHERE o.ID IS NULL',
+				$order_notes_table,
+				$orders_table
+			)
 		);
 
+		// 5. Check orphaned order note meta.
 		$orphaned_note_meta = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$order_notes_meta_table}` onm
-            LEFT JOIN `{$order_notes_table}` on_ ON onm.comment_id = on_.comment_ID
-            WHERE on_.comment_ID IS NULL" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i onm
+                LEFT JOIN %i on_ ON onm.comment_id = on_.comment_ID
+                WHERE on_.comment_ID IS NULL',
+				$order_notes_meta_table,
+				$order_notes_table
+			)
 		);
 
 		$total_orphans = $orphaned_meta + $orphaned_items + $orphaned_item_meta + $orphaned_notes + $orphaned_note_meta;

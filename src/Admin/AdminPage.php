@@ -1,5 +1,4 @@
 <?php
-
 /**
  *
  * Admin Page
@@ -20,7 +19,6 @@ defined( 'ABSPATH' ) || exit;
  *
  * Class AdminPage
  */
-
 class AdminPage {
 	/**
 	 * The page slug used in the URL and add_menu_page()
@@ -55,7 +53,7 @@ class AdminPage {
 			self::PAGE_SLUG,
 			array( $this, 'admin_render_page' ),
 			'dashicons-archive',
-			56 // menu-position
+			56 // menu-position.
 		);
 	}
 
