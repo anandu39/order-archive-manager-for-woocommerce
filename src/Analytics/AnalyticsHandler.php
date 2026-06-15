@@ -422,6 +422,29 @@ class AnalyticsHandler {
 	}
 
 	/**
+	 * Get cached health score with optional force refresh.
+	 *
+	 * @param bool $force_refresh Force recalculation.
+	 * @return array<string, mixed>
+	 */
+	public function get_cached_health_score( bool $force_refresh = false ): array {
+		$cache = new \HW\WOAM\Health\HealthScoreCache();
+
+		if ( ! $force_refresh && ! $cache->is_stale() ) {
+			$cached = $cache->get_cached_score();
+			if ( $cached ) {
+				return $cached;
+			}
+		}
+
+		// Calculate fresh score.
+		$score = $this->get_health_score();
+		$cache->cache_score( $score );
+
+		return $score;
+	}
+
+	/**
 	 * Checks if a database table exists.
 	 *
 	 * @param string $table_name Table name to check.

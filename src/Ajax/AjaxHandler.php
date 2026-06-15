@@ -109,7 +109,7 @@ class AjaxHandler {
 	 */
 	public function handle_get_health_score(): void {
 		$this->verify_request();
-		wp_send_json_success( $this->analytics_handler->get_health_score() );
+		wp_send_json_success( $this->analytics_handler->get_cached_health_score() );
 	}
 
 	/**

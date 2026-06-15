@@ -169,6 +169,29 @@ class Plugin {
 	}
 
 	/**
+	 * Register health score cron refresh hook.
+	 *
+	 * @return void
+	 */
+	private function register_health_cron(): void {
+		add_action( 'hw_woam_refresh_health_score', array( $this, 'refresh_health_score_callback' ) );
+	}
+
+	/**
+	 * Callback for refreshing health score cache.
+	 *
+	 * @return void
+	 */
+	public function refresh_health_score_callback(): void {
+		// This will be called via WP Cron.
+		// Force refresh the analytics handler cache.
+		if ( isset( $this->analytics_handler ) ) {
+			// Recalculate and recache.
+			$this->analytics_handler->get_health_score( true );
+		}
+	}
+
+	/**
 	 * Boots the plugin.
 	 * Called once from the main plugin file on plugins_loaded.
 	 *
@@ -217,6 +240,7 @@ class Plugin {
 			$this->ajax_handler->register_hooks();
 			$this->onboarding->register_hooks();
 		}
+		$this->register_health_cron();
 
 		$this->schema->maybe_upgrade();
 		$this->load_textdomain();
@@ -235,6 +259,10 @@ class Plugin {
 		$schema = new Database\Schema( $wpdb, $tables );
 
 		$schema->create_tables();
+
+		// Schedule health score cron.
+		$health_cache = new \HW\WOAM\Health\HealthScoreCache();
+		$health_cache->schedule_cron();
 	}
 
 	/**
@@ -245,6 +273,10 @@ class Plugin {
 	 */
 	public function deactivate(): void {
 		delete_transient( 'hw_woam_order_date_range' );
+
+		// Clear health score cron.
+		$health_cache = new \HW\WOAM\Health\HealthScoreCache();
+		$health_cache->clear_cron();
 	}
 
 
