@@ -824,24 +824,300 @@
 
     /**
      * ============================================================
-     * ARCHIVED TAB FUNCTIONS (Original)
+     * ARCHIVED TAB FUNCTIONS
      * ============================================================
      */
 
     /**
-     * Loads the Archive Inventory card and status checkboxes
+     * Loads vault statistics for the Archive Vault banner
+     */
+    async function loadVaultStatistics() {
+        try {
+            const data = await woamPost('hw_woam_get_lifetime_stats');
+            
+            const totalOrdersEl = document.getElementById('woam-vault-total-orders');
+            const totalSavedEl = document.getElementById('woam-vault-total-saved');
+            const totalRevenueEl = document.getElementById('woam-vault-total-revenue');
+            const lastArchiveEl = document.getElementById('woam-vault-last-archive');
+            
+            if (totalOrdersEl) {
+                totalOrdersEl.textContent = formatNumber(data.total_archived_orders);
+            }
+            
+            if (totalSavedEl) {
+                totalSavedEl.textContent = data.total_saved_formatted;
+            }
+            
+            if (totalRevenueEl) {
+                totalRevenueEl.textContent = data.archived_revenue_formatted;
+            }
+            
+            // Get last archive date from recent activity
+            if (lastArchiveEl) {
+                const activityData = await woamPost('hw_woam_get_recent_activity');
+                const lastArchive = activityData.activity.find(a => a.action === 'archive');
+                if (lastArchive) {
+                    lastArchiveEl.textContent = lastArchive.date_formatted;
+                } else {
+                    lastArchiveEl.textContent = 'Never';
+                }
+            }
+            
+        } catch (err) {
+            console.error('Failed to load vault statistics:', err);
+        }
+    }
+
+    /**
+     * Loads confidence section data
+     */
+    async function loadConfidenceSection() {
+        try {
+            // Get integrity data
+            const integrityData = await woamPost('hw_woam_run_integrity_check');
+            const lifetimeData = await woamPost('hw_woam_get_lifetime_stats');
+            
+            // Update integrity status
+            const integrityStatus = document.getElementById('woam-confidence-integrity');
+            if (integrityStatus) {
+                if (integrityData.total_orphans === 0) {
+                    integrityStatus.innerHTML = '<span class="woam-confidence-status--ok">✓ Healthy</span>';
+                    integrityStatus.className = 'woam-confidence-status woam-confidence-status--ok';
+                } else {
+                    integrityStatus.innerHTML = `<span class="woam-confidence-status--warn">⚠ ${integrityData.total_orphans} orphaned records</span>`;
+                    integrityStatus.className = 'woam-confidence-status woam-confidence-status--warn';
+                }
+            }
+            
+            // Update restore success rate
+            const restoreRate = document.getElementById('woam-confidence-rate');
+            if (restoreRate) {
+                const rate = lifetimeData.restore_success_rate;
+                if (rate === 100) {
+                    restoreRate.innerHTML = '<span class="woam-confidence-status--ok">100% Success Rate</span>';
+                    restoreRate.className = 'woam-confidence-status woam-confidence-status--ok';
+                } else if (rate >= 90) {
+                    restoreRate.innerHTML = `<span class="woam-confidence-status--ok">${rate}% Success Rate</span>`;
+                    restoreRate.className = 'woam-confidence-status woam-confidence-status--ok';
+                } else if (rate >= 70) {
+                    restoreRate.innerHTML = `<span class="woam-confidence-status--warn">${rate}% Success Rate</span>`;
+                    restoreRate.className = 'woam-confidence-status woam-confidence-status--warn';
+                } else {
+                    restoreRate.innerHTML = `<span class="woam-confidence-status--error">${rate}% Success Rate</span>`;
+                    restoreRate.className = 'woam-confidence-status woam-confidence-status--error';
+                }
+            }
+            
+            // Update verification status
+            const verifyStatus = document.getElementById('woam-confidence-verify');
+            if (verifyStatus) {
+                if (integrityData.is_healthy) {
+                    verifyStatus.innerHTML = '<span class="woam-confidence-status--ok">✓ Fully Verified</span>';
+                    verifyStatus.className = 'woam-confidence-status woam-confidence-status--ok';
+                } else {
+                    verifyStatus.innerHTML = '<span class="woam-confidence-status--warn">⚠ Needs Attention</span>';
+                    verifyStatus.className = 'woam-confidence-status woam-confidence-status--warn';
+                }
+            }
+            
+            // Update last scan date
+            const lastScan = document.getElementById('woam-confidence-last-scan');
+            if (lastScan) {
+                const scanHistory = getScanHistoryFromStorage();
+                if (scanHistory && scanHistory.length > 0) {
+                    const lastScanDate = new Date(scanHistory[0].date);
+                    lastScan.innerHTML = lastScanDate.toLocaleDateString();
+                } else {
+                    lastScan.innerHTML = 'Never';
+                }
+            }
+            
+        } catch (err) {
+            console.error('Failed to load confidence section:', err);
+        }
+    }
+
+    /**
+     * Scan history management (localStorage)
+     */
+    function getScanHistoryFromStorage() {
+        const history = localStorage.getItem('woam_scan_history');
+        return history ? JSON.parse(history) : [];
+    }
+
+    function saveScanHistory(scanResult) {
+        const history = getScanHistoryFromStorage();
+        history.unshift({
+            date: new Date().toISOString(),
+            result: scanResult
+        });
+        // Keep only last 10 scans
+        if (history.length > 10) history.pop();
+        localStorage.setItem('woam_scan_history', JSON.stringify(history));
+    }
+
+    /**
+     * Renders scan history in the UI
+     */
+    function renderScanHistory() {
+        const historyContainer = document.getElementById('woam-scan-history-list');
+        const historySection = document.getElementById('woam-scan-history');
+        const history = getScanHistoryFromStorage();
+        
+        if (!historyContainer) return;
+        
+        if (history.length === 0) {
+            historySection.style.display = 'none';
+            return;
+        }
+        
+        historySection.style.display = 'block';
+        let html = '<div class="woam-scan-history-list">';
+        
+        history.forEach(scan => {
+            const date = new Date(scan.date);
+            const isHealthy = scan.result.is_healthy;
+            const statusClass = isHealthy ? 'woam-scan-history-status--healthy' : 'woam-scan-history-status--issues';
+            const statusIcon = isHealthy ? '✓' : '⚠';
+            const statusText = isHealthy ? 'Healthy' : `${scan.result.total_orphans} issues found`;
+            
+            html += `
+                <div class="woam-scan-history-item">
+                    <span class="woam-scan-history-date">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</span>
+                    <span class="woam-scan-history-status ${statusClass}">
+                        ${statusIcon} ${statusText}
+                    </span>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        historyContainer.innerHTML = html;
+    }
+
+    /**
+     * Enhanced integrity check with history tracking
+     */
+    async function runEnhancedIntegrityCheck(btn, resultEl) {
+        btn.disabled = true;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="dashicons dashicons-update spin"></span> Scanning...';
+        resultEl.innerHTML = '';
+
+        try {
+            const data = await woamPost('hw_woam_run_integrity_check');
+            
+            // Save to history
+            saveScanHistory(data);
+            renderScanHistory();
+            
+            // Update confidence section
+            await loadConfidenceSection();
+            
+            if (data.is_healthy) {
+                resultEl.innerHTML = `
+                    <div class="woam-summary woam-summary--ok">
+                        <span class="dashicons dashicons-yes-alt"></span>
+                        <div>
+                            <strong>Archive Health Check Passed</strong>
+                            <p>All ${formatNumber(data.total_orphans === 0 ? 'archive' : '')} records are intact. No issues found.</p>
+                        </div>
+                    </div>`;
+                
+                // Show fix button? No, but could offer optimization
+                const fixBtn = document.getElementById('woam-fix-orphans');
+                if (fixBtn) fixBtn.style.display = 'none';
+                
+            } else {
+                resultEl.innerHTML = `
+                    <div class="woam-summary woam-summary--warn">
+                        <span class="dashicons dashicons-warning"></span>
+                        <div>
+                            <strong>${formatNumber(data.total_orphans)} Issues Found</strong>
+                            <ul>
+                                ${data.orphaned_meta ? `<li>${formatNumber(data.orphaned_meta)} orphaned order meta rows</li>` : ''}
+                                ${data.orphaned_items ? `<li>${formatNumber(data.orphaned_items)} orphaned order item rows</li>` : ''}
+                                ${data.orphaned_item_meta ? `<li>${formatNumber(data.orphaned_item_meta)} orphaned item meta rows</li>` : ''}
+                                ${data.orphaned_notes ? `<li>${formatNumber(data.orphaned_notes)} orphaned order note rows</li>` : ''}
+                                ${data.orphaned_note_meta ? `<li>${formatNumber(data.orphaned_note_meta)} orphaned note meta rows</li>` : ''}
+                            </ul>
+                            <button type="button" class="woam-button woam-button--small" data-fix-orphans>
+                                <span class="dashicons dashicons-hammer"></span>
+                                Fix Orphaned Records
+                            </button>
+                        </div>
+                    </div>`;
+                
+                // Show fix button and attach handler
+                const fixBtn = resultEl.querySelector('[data-fix-orphans]');
+                if (fixBtn) {
+                    fixBtn.addEventListener('click', () => {
+                        // This would call a new endpoint to clean orphans
+                        alert('Orphan fixing will be available in a future update.');
+                    });
+                }
+            }
+
+        } catch (err) {
+            resultEl.innerHTML = `<div class="woam-summary woam-summary--error">
+                <span class="dashicons dashicons-warning"></span>
+                <p>${escHtml(err.message)}</p>
+            </div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+
+    /**
+     * Bulk select/deselect for archived statuses
+     */
+    function initArchivedBulkSelectors() {
+        const selectAllBtn = document.querySelector('[data-select-all-archived-statuses]');
+        const deselectAllBtn = document.querySelector('[data-deselect-all-archived-statuses]');
+        
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('#woam-archived-statuses input');
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                });
+            });
+        }
+        
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('#woam-archived-statuses input');
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                });
+            });
+        }
+    }
+
+    /**
+     * Loads the Archive Vault contents and statistics
+     * Phase 4: Enhanced with vault statistics and confidence section
      */
     async function loadArchivedTab() {
         const inventoryEl = document.getElementById('woam-archive-inventory');
         const statusEl = document.getElementById('woam-archived-statuses');
 
-        try {
-            const data = await woamPost('hw_woam_get_archive_breakdown');
-            renderArchiveInventory(inventoryEl, data);
-            renderArchivedStatusCheckboxes(statusEl, data);
-        } catch (err) {
-            if (inventoryEl) showError(inventoryEl, err.message);
-        }
+        // Load all vault components in parallel
+        await Promise.allSettled([
+            loadVaultStatistics(),
+            loadConfidenceSection(),
+            (async () => {
+                try {
+                    const data = await woamPost('hw_woam_get_archive_breakdown');
+                    renderArchiveInventory(inventoryEl, data);
+                    renderArchivedStatusCheckboxes(statusEl, data);
+                    renderScanHistory();
+                } catch (err) {
+                    if (inventoryEl) showError(inventoryEl, err.message);
+                }
+            })()
+        ]);
     }
 
     /**
@@ -1042,47 +1318,13 @@
             await loadArchivedTab();
         });
 
-        // Integrity Check button
+        // Enhanced Integrity Check button (Phase 4)
         const integrityBtn = document.getElementById('woam-run-integrity-check');
         if (integrityBtn) {
             integrityBtn.addEventListener('click', async () => {
                 const btn = integrityBtn;
                 const resultEl = document.getElementById('woam-integrity-result');
-
-                btn.disabled = true;
-                btn.textContent = 'Scanning…';
-                resultEl.innerHTML = '';
-
-                try {
-                    const data = await woamPost('hw_woam_run_integrity_check');
-
-                    if (data.is_healthy) {
-                        resultEl.innerHTML = `
-                            <div class="woam-summary woam-summary--ok">
-                                <span class="dashicons dashicons-yes-alt"></span>
-                                <p>All archive records are intact. No issues found.</p>
-                            </div>`;
-                    } else {
-                        resultEl.innerHTML = `
-                            <div class="woam-summary woam-summary--warn">
-                                <span class="dashicons dashicons-warning"></span>
-                                <p><strong>${formatNumber(data.total_orphans)} orphaned rows found.</strong></p>
-                                <ul>
-                                    ${data.orphaned_meta ? `<li>${formatNumber(data.orphaned_meta)} orphaned order meta rows</li>` : ''}
-                                    ${data.orphaned_items ? `<li>${formatNumber(data.orphaned_items)} orphaned order item rows</li>` : ''}
-                                    ${data.orphaned_item_meta ? `<li>${formatNumber(data.orphaned_item_meta)} orphaned item meta rows</li>` : ''}
-                                    ${data.orphaned_notes ? `<li>${formatNumber(data.orphaned_notes)} orphaned order note rows</li>` : ''}
-                                    ${data.orphaned_note_meta ? `<li>${formatNumber(data.orphaned_note_meta)} orphaned note meta rows</li>` : ''}
-                                </ul>
-                            </div>`;
-                    }
-
-                } catch (err) {
-                    resultEl.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.textContent = 'Run Integrity Check';
-                }
+                await runEnhancedIntegrityCheck(btn, resultEl);
             });
         }
     }

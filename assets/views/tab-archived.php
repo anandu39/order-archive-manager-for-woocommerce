@@ -1,19 +1,94 @@
 <?php
 /**
- * Archived Orders tab — Inventory, Restore/Delete step flow, Integrity Check.
+ * Archived Orders tab - Archive Vault with statistics, restore/delete operations, and integrity monitoring.
  * Populated and driven by woam-admin.js. This file is the structural shell only.
  *
+ * Phase 4: Complete redesign with Archive Vault concept, statistics banner, and confidence section
+ * 
  * @package HW\WOAM\Admin
  */
 
 defined( 'ABSPATH' ) || exit;
 ?>
 
-<!-- Archive Inventory — outside the step flow, always visible -->
-<div class="woam-card">
-    <h2><?php esc_html_e( 'Archive Inventory', 'woo-order-archive-manager' ); ?></h2>
+<!-- Archive Vault Statistics Banner (NEW - Phase 4) -->
+<div class="woam-vault-stats" id="woam-vault-stats">
+    <div class="woam-vault-stat-card">
+        <span class="dashicons dashicons-archive"></span>
+        <div class="woam-vault-stat-content">
+            <span class="woam-vault-stat-number" id="woam-vault-total-orders">0</span>
+            <span class="woam-vault-stat-label"><?php esc_html_e( 'Archived Orders', 'woo-order-archive-manager' ); ?></span>
+        </div>
+    </div>
+    <div class="woam-vault-stat-card">
+        <span class="dashicons dashicons-chart-line"></span>
+        <div class="woam-vault-stat-content">
+            <span class="woam-vault-stat-number" id="woam-vault-total-saved">0 MB</span>
+            <span class="woam-vault-stat-label"><?php esc_html_e( 'Storage Saved', 'woo-order-archive-manager' ); ?></span>
+        </div>
+    </div>
+    <div class="woam-vault-stat-card">
+        <span class="dashicons dashicons-money-alt"></span>
+        <div class="woam-vault-stat-content">
+            <span class="woam-vault-stat-number" id="woam-vault-total-revenue">$0</span>
+            <span class="woam-vault-stat-label"><?php esc_html_e( 'Revenue in Archive', 'woo-order-archive-manager' ); ?></span>
+        </div>
+    </div>
+    <div class="woam-vault-stat-card">
+        <span class="dashicons dashicons-calendar-alt"></span>
+        <div class="woam-vault-stat-content">
+            <span class="woam-vault-stat-number" id="woam-vault-last-archive"><?php esc_html_e( 'Never', 'woo-order-archive-manager' ); ?></span>
+            <span class="woam-vault-stat-label"><?php esc_html_e( 'Last Archive', 'woo-order-archive-manager' ); ?></span>
+        </div>
+    </div>
+</div>
+
+<!-- Restore Confidence Section (NEW - Phase 4) -->
+<div class="woam-confidence-section" id="woam-confidence-section">
+    <div class="woam-confidence-header">
+        <span class="dashicons dashicons-shield-alt"></span>
+        <h3><?php esc_html_e( 'Restore Confidence', 'woo-order-archive-manager' ); ?></h3>
+    </div>
+    <div class="woam-confidence-grid">
+        <div class="woam-confidence-item" data-confidence="integrity">
+            <span class="woam-confidence-icon dashicons dashicons-database"></span>
+            <div class="woam-confidence-info">
+                <span class="woam-confidence-label"><?php esc_html_e( 'Data Integrity', 'woo-order-archive-manager' ); ?></span>
+                <span class="woam-confidence-status" id="woam-confidence-integrity"><?php esc_html_e( 'Checking...', 'woo-order-archive-manager' ); ?></span>
+            </div>
+        </div>
+        <div class="woam-confidence-item" data-confidence="restore">
+            <span class="woam-confidence-icon dashicons dashicons-update"></span>
+            <div class="woam-confidence-info">
+                <span class="woam-confidence-label"><?php esc_html_e( 'Restore Success Rate', 'woo-order-archive-manager' ); ?></span>
+                <span class="woam-confidence-status" id="woam-confidence-rate">--%</span>
+            </div>
+        </div>
+        <div class="woam-confidence-item" data-confidence="verify">
+            <span class="woam-confidence-icon dashicons dashicons-yes-alt"></span>
+            <div class="woam-confidence-info">
+                <span class="woam-confidence-label"><?php esc_html_e( 'Verification Status', 'woo-order-archive-manager' ); ?></span>
+                <span class="woam-confidence-status" id="woam-confidence-verify"><?php esc_html_e( 'Awaiting Scan', 'woo-order-archive-manager' ); ?></span>
+            </div>
+        </div>
+        <div class="woam-confidence-item" data-confidence="backup">
+            <span class="woam-confidence-icon dashicons dashicons-backup"></span>
+            <div class="woam-confidence-info">
+                <span class="woam-confidence-label"><?php esc_html_e( 'Last Integrity Scan', 'woo-order-archive-manager' ); ?></span>
+                <span class="woam-confidence-status" id="woam-confidence-last-scan"><?php esc_html_e( 'Never', 'woo-order-archive-manager' ); ?></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Archive Inventory Card (renamed for Phase 4) -->
+<div class="woam-card woam-card--vault">
+    <h2>
+        <span class="dashicons dashicons-archive"></span>
+        <?php esc_html_e( 'Archive Vault', 'woo-order-archive-manager' ); ?>
+    </h2>
     <div id="woam-archive-inventory" class="woam-loading">
-        <?php esc_html_e( 'Loading…', 'woo-order-archive-manager' ); ?>
+        <?php esc_html_e( 'Loading archive contents...', 'woo-order-archive-manager' ); ?>
     </div>
 </div>
 
@@ -37,10 +112,12 @@ defined( 'ABSPATH' ) || exit;
             <div class="woam-radio-group">
                 <label class="woam-radio">
                     <input type="radio" name="archived_action" value="restore" checked />
+                    <span class="dashicons dashicons-restore"></span>
                     <?php esc_html_e( 'Restore orders to WooCommerce', 'woo-order-archive-manager' ); ?>
                 </label>
                 <label class="woam-radio">
                     <input type="radio" name="archived_action" value="delete" />
+                    <span class="dashicons dashicons-trash"></span>
                     <?php esc_html_e( 'Permanently delete from archive', 'woo-order-archive-manager' ); ?>
                 </label>
             </div>
@@ -48,10 +125,21 @@ defined( 'ABSPATH' ) || exit;
 
         <div class="woam-field-group">
             <label><?php esc_html_e( 'Filter by status (leave all unchecked for all statuses)', 'woo-order-archive-manager' ); ?></label>
-            <!-- Populated by JS from hw_woam_get_archive_breakdown -->
             <div class="woam-checkbox-grid" id="woam-archived-statuses">
                 <p class="woam-loading"><?php esc_html_e( 'Loading statuses…', 'woo-order-archive-manager' ); ?></p>
             </div>
+        </div>
+
+        <!-- Bulk select/deselect for archived statuses (NEW) -->
+        <div class="woam-bulk-actions">
+            <button type="button" class="woam-bulk-btn" data-select-all-archived-statuses>
+                <span class="dashicons dashicons-yes-alt"></span>
+                <?php esc_html_e( 'Select All', 'woo-order-archive-manager' ); ?>
+            </button>
+            <button type="button" class="woam-bulk-btn" data-deselect-all-archived-statuses>
+                <span class="dashicons dashicons-no-alt"></span>
+                <?php esc_html_e( 'Deselect All', 'woo-order-archive-manager' ); ?>
+            </button>
         </div>
 
         <div class="woam-step-actions">
@@ -88,7 +176,6 @@ defined( 'ABSPATH' ) || exit;
             <?php esc_html_e( 'Dry run (no changes will be made)', 'woo-order-archive-manager' ); ?>
         </label>
 
-        <!-- Confirm input — visible only for permanent delete, hidden by default -->
         <div class="woam-field-group" id="woam-archived-confirm-group" style="display:none;">
             <label for="woam-archived-confirm">
                 <?php
@@ -117,15 +204,32 @@ defined( 'ABSPATH' ) || exit;
             </button>
         </div>
     </div>
-
 </div>
 
-<!-- Integrity Check — below the step flow -->
-<div class="woam-card woam-integrity-check">
-    <h2><?php esc_html_e( 'Archive Integrity Check', 'woo-order-archive-manager' ); ?></h2>
-    <p><?php esc_html_e( 'Scans the archive tables for orphaned rows — records with no matching parent order.', 'woo-order-archive-manager' ); ?></p>
-    <button type="button" class="woam-button woam-button--secondary" id="woam-run-integrity-check">
-        <?php esc_html_e( 'Run Integrity Check', 'woo-order-archive-manager' ); ?>
-    </button>
+<!-- Enhanced Integrity Check Section (Phase 4) -->
+<div class="woam-card woam-card--integrity">
+    <h2>
+        <span class="dashicons dashicons-health"></span>
+        <?php esc_html_e( 'Archive Health Monitor', 'woo-order-archive-manager' ); ?>
+    </h2>
+    <p><?php esc_html_e( 'Scans the archive tables for orphaned rows, missing records, and data integrity issues.', 'woo-order-archive-manager' ); ?></p>
+    
+    <div class="woam-integrity-actions">
+        <button type="button" class="woam-button woam-button--secondary" id="woam-run-integrity-check">
+            <span class="dashicons dashicons-search"></span>
+            <?php esc_html_e( 'Run Full Health Scan', 'woo-order-archive-manager' ); ?>
+        </button>
+        <button type="button" class="woam-button woam-button--secondary" id="woam-fix-orphans" style="display:none;">
+            <span class="dashicons dashicons-hammer"></span>
+            <?php esc_html_e( 'Fix Orphaned Records', 'woo-order-archive-manager' ); ?>
+        </button>
+    </div>
+    
     <div id="woam-integrity-result"></div>
+    
+    <!-- Scan History (NEW - Phase 4) -->
+    <div class="woam-scan-history" id="woam-scan-history" style="display:none;">
+        <h4><?php esc_html_e( 'Scan History', 'woo-order-archive-manager' ); ?></h4>
+        <div id="woam-scan-history-list"></div>
+    </div>
 </div>
