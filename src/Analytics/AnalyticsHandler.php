@@ -246,6 +246,7 @@ class AnalyticsHandler {
 		$estimated_savings = 0;
 		$confidence        = 'medium';
 		$reason            = '';
+		$title             = '';
 
 		if ( ! empty( $monthly_distribution ) ) {
 			// Look for orders older than 12 months.
@@ -257,6 +258,11 @@ class AnalyticsHandler {
 					$estimated_savings = (int) ( $month_data->order_count * 50 * 1024 );
 					$confidence        = 'high';
 					$reason            = __( 'Orders from this period are over 12 months old and unlikely to be modified.', 'woo-order-archive-manager' );
+					$title             = sprintf(
+						/* translators: %s: month and year */
+						__( 'Archive orders from %s', 'woo-order-archive-manager' ),
+						date_i18n( 'F Y', strtotime( $month_data->month . '-01' ) )
+					);
 					break;
 				}
 			}
@@ -271,6 +277,11 @@ class AnalyticsHandler {
 						$estimated_savings = (int) ( $month_data->order_count * 50 * 1024 );
 						$confidence        = 'medium';
 						$reason            = __( 'Orders from this period are over 6 months old. Archiving them will improve performance.', 'woo-order-archive-manager' );
+						$title             = sprintf(
+							/* translators: %s: month and year */
+							__( 'Archive orders from %s', 'woo-order-archive-manager' ),
+							date_i18n( 'F Y', strtotime( $month_data->month . '-01' ) )
+						);
 						break;
 					}
 				}
@@ -282,13 +293,16 @@ class AnalyticsHandler {
 			$recommended_date = gmdate( 'Y-m-d', strtotime( '-12 months' ) );
 			$confidence       = 'low';
 			$reason           = __( 'Your store doesn\'t have many old orders. Consider archiving completed orders older than 12 months.', 'woo-order-archive-manager' );
+			$title            = __( 'Archive Completed Orders', 'woo-order-archive-manager' );
 		}
 
 		$statuses    = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' );
 		$order_count = $this->get_order_count_by_date_status( $recommended_date, $statuses );
 
 		return array(
+			'id'                          => md5( $recommended_date . implode( '', $statuses ) ), // Simple unique ID.
 			'has_recommendation'          => $order_count > 0,
+			'title'                       => $title,
 			'recommended_date'            => $recommended_date,
 			'recommended_date_formatted'  => date_i18n(
 				get_option( 'date_format' ),

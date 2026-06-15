@@ -230,7 +230,7 @@
     }
 
     /**
-     * Loads smart recommendations
+     * Loads smart recommendations with one-click application
      */
     async function loadRecommendations() {
         const container = document.getElementById('woam-recommendation');
@@ -261,36 +261,132 @@
                         <span class="dashicons dashicons-info-outline"></span>
                         ${escHtml(data.confidence_label)}
                     </span>
-                    <h3>Archive orders placed before ${escHtml(data.recommended_date_formatted)}</h3>
+                    <h3>${escHtml(data.title || 'Archive orders before ' + data.recommended_date_formatted)}</h3>
                     <p>${escHtml(data.reason)}</p>
                     <div class="woam-recommendation-savings">
                         <span class="dashicons dashicons-chart-line"></span>
                         Save ~${escHtml(data.estimated_savings_formatted)}
                     </div>
-                    <button type="button" class="woam-button woam-button--primary" data-use-recommendation>
-                        <span class="dashicons dashicons-archive"></span>
-                        ${escHtml(data.action_label)}
-                    </button>
+                    <div class="woam-recommendation-actions">
+                        <button type="button" class="woam-button woam-button--primary" data-use-recommendation>
+                            <span class="dashicons dashicons-archive"></span>
+                            Apply Recommendation
+                        </button>
+                        <button type="button" class="woam-button woam-button--secondary" data-dismiss-recommendation>
+                            <span class="dashicons dashicons-no-alt"></span>
+                            Dismiss
+                        </button>
+                    </div>
                 </div>
             `;
 
             container.classList.remove('woam-loading');
             container.innerHTML = html;
 
-            const useBtn = container.querySelector('[data-use-recommendation]');
-            if (useBtn) {
-                useBtn.addEventListener('click', () => {
-                    sessionStorage.setItem('woam_recommendation', JSON.stringify({
-                        date: data.recommended_date,
-                        statuses: data.recommended_statuses
-                    }));
-                    document.querySelector('.woam-tab[data-tab="archive"]').click();
+            // Apply recommendation button
+            const applyBtn = container.querySelector('[data-use-recommendation]');
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => {
+                    applyRecommendation(data);
+                });
+            }
+
+            // Dismiss recommendation button
+            const dismissBtn = container.querySelector('[data-dismiss-recommendation]');
+            if (dismissBtn) {
+                dismissBtn.addEventListener('click', async () => {
+                    await dismissRecommendation(data.id);
+                    container.innerHTML = `
+                        <div class="woam-empty-state">
+                            <div class="woam-empty-state-icon">
+                                <span class="dashicons dashicons-info"></span>
+                            </div>
+                            <p>Recommendation dismissed. We'll check back later.</p>
+                        </div>
+                    `;
                 });
             }
 
         } catch (err) {
             showError(container, err.message);
         }
+    }
+
+    /**
+     * Apply a recommendation by pre-filling archive tab
+     *
+     * @param {Object} recommendation Recommendation data
+     */
+    function applyRecommendation(recommendation) {
+        // Store recommendation in sessionStorage for archive tab
+        sessionStorage.setItem('woam_recommendation', JSON.stringify({
+            date: recommendation.recommended_date,
+            statuses: recommendation.recommended_statuses || ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
+        }));
+        
+        // Also store that this was from a recommendation
+        sessionStorage.setItem('woam_recommendation_applied', 'true');
+        
+        // Switch to archive tab
+        const archiveTab = document.querySelector('.woam-tab[data-tab="archive"]');
+        if (archiveTab) {
+            archiveTab.click();
+            
+            // Show a success message
+            setTimeout(() => {
+                showNotification('Recommendation applied! Review the filters and click "Start Archive".', 'success');
+            }, 500);
+        }
+    }
+
+    /**
+     * Dismiss a recommendation
+     *
+     * @param {string} recommendationId Recommendation ID
+     */
+    async function dismissRecommendation(recommendationId) {
+        try {
+            await woamPost('hw_woam_dismiss_recommendation', {
+                recommendation_id: recommendationId
+            });
+        } catch (err) {
+            console.error('Failed to dismiss recommendation:', err);
+        }
+    }
+
+    /**
+     * Show notification message
+     *
+     * @param {string} message Message to display
+     * @param {string} type Type: 'success', 'warning', 'error', 'info'
+     */
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `woam-notification woam-notification--${type}`;
+        
+        let icon = 'info';
+        if (type === 'success') icon = 'yes-alt';
+        if (type === 'warning') icon = 'warning';
+        if (type === 'error') icon = 'warning';
+        
+        notification.innerHTML = `
+            <span class="dashicons dashicons-${icon}"></span>
+            <span>${escHtml(message)}</span>
+            <button class="woam-notification-close">&times;</button>
+        `;
+        
+        document.querySelector('.woam-wrap').prepend(notification);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            notification.classList.add('woam-notification--fadeout');
+            setTimeout(() => notification.remove(), 300);
+        }, 5000);
+        
+        // Close button
+        notification.querySelector('.woam-notification-close')?.addEventListener('click', () => {
+            notification.remove();
+        });
     }
 
     /**
