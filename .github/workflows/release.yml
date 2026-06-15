@@ -1,0 +1,47 @@
+name: Build Release Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Install Production Dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Remove Development Files
+        run: |
+          rm -rf tests
+          rm -f phpstan.neon
+          rm -f phpcs.xml.dist
+
+      - name: Prepare Build Directory
+        run: |
+          mkdir build
+          mkdir build/woo-order-archive-manager
+          rsync -av ./ build/woo-order-archive-manager --exclude build
+
+      - name: Create ZIP
+        run: |
+          cd build
+          zip -r WooCommerce-Order-Archive-Manager-${{ github.ref_name }}.zip woo-order-archive-manager
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/WooCommerce-Order-Archive-Manager-${{ github.ref_name }}.zip
