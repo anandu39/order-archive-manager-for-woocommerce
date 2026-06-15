@@ -1,5 +1,4 @@
 <?php
-
 /**
  *
  * Restore Handler
@@ -23,7 +22,6 @@ defined( 'ABSPATH' ) || exit;
  *
  * Class RestoreHandler
  */
-
 class RestoreHandler {
 
 	/**
@@ -82,27 +80,36 @@ class RestoreHandler {
 	 * Used by the admin UI to show the order count before starting a restore.
 	 *
 	 * @param array<int, string> $statuses Optional. Filter by order status (e.g. ['wc-completed']).
-	 *                                     Pass an empty array to count all archived orders.
+	 * Pass an empty array to count all archived orders.
 	 * @return int
 	 */
 	public function get_total_archived_orders( array $statuses = array() ): int {
 
+		$db    = $this->wpdb;
 		$table = $this->tables->orders;
 
+		// Branch 1: Empty statuses - count all archived records cleanly.
 		if ( empty( $statuses ) ) {
-			return (int) $this->wpdb->get_var(
-				"SELECT COUNT(*) FROM `{$table}`" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			);
+			$query        = 'SELECT COUNT(*) FROM %i';
+			$args         = array( $table );
+			$prepared_sql = $db->prepare( $query, $args );
+
+			return (int) $db->get_var( $prepared_sql );
 		}
 
+		// Branch 2: Handle status list logic safely.
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		$sql = $this->wpdb->prepare(
-			"SELECT COUNT(*) FROM `{$table}` WHERE post_status IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$statuses
-		);
+		// Assemble a flat query text layout before passing it into the engine.
+		$query = "SELECT COUNT(*) FROM %i WHERE post_status IN ({$placeholders})";
 
-		return (int) $this->wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// Combine table identifier and status strings sequentially into a single argument list.
+		$args = array_merge( array( $table ), $statuses );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		return (int) $db->get_var( $prepared_sql );
 	}
 
 	/**
@@ -205,24 +212,19 @@ class RestoreHandler {
 	 */
 	private function copy_order_post( int $order_id ): void {
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT INTO {$this->wpdb->posts}
-                (ID, post_author, post_date, post_date_gmt, post_content, post_title,
-                post_excerpt, post_status, comment_status, ping_status, post_password,
-                post_name, to_ping, pinged, post_modified, post_modified_gmt,
-                post_content_filtered, post_parent, guid, menu_order, post_type,
-                post_mime_type, comment_count)
-                SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title,
-                post_excerpt, post_status, comment_status, ping_status, post_password,
-                post_name, to_ping, pinged, post_modified, post_modified_gmt,
-                post_content_filtered, post_parent, guid, menu_order, post_type,
-                post_mime_type, comment_count
-                FROM {$this->tables->orders}
-                WHERE ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$target_tbl = $db->posts;
+		$source_tbl = $this->tables->orders;
+
+		// Clean template mapping target and source via isolated double %i table placeholders.
+		$query = 'INSERT INTO %i (ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, comment_status, ping_status, post_password, post_name, to_ping, pinged, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count) SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, comment_status, ping_status, post_password, post_name, to_ping, pinged, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count FROM %i WHERE ID = %d';
+		$args  = array( $target_tbl, $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore order #{$order_id} to wp_posts." );
@@ -242,16 +244,19 @@ class RestoreHandler {
 	 */
 	private function copy_order_meta( int $order_id ): void {
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT INTO {$this->wpdb->postmeta}
-                (meta_id, post_id, meta_key, meta_value)
-                SELECT meta_id, post_id, meta_key, meta_value
-                FROM {$this->tables->orders_meta}
-                WHERE post_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$target_tbl = $db->postmeta;
+		$source_tbl = $this->tables->orders_meta;
+
+		// Clean template using single quotes and isolated double identifier placeholders.
+		$query = 'INSERT INTO %i (meta_id, post_id, meta_key, meta_value) SELECT meta_id, post_id, meta_key, meta_value FROM %i WHERE post_id = %d';
+		$args  = array( $target_tbl, $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore meta for order #{$order_id}." );
@@ -267,18 +272,19 @@ class RestoreHandler {
 	 */
 	private function copy_order_items( int $order_id ): void {
 
-		$order_items_table = $this->wpdb->prefix . 'woocommerce_order_items';
+		$db         = $this->wpdb;
+		$target_tbl = $db->prefix . 'woocommerce_order_items';
+		$source_tbl = $this->tables->order_items;
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT INTO {$order_items_table}
-                (order_item_id, order_item_name, order_item_type, order_id)
-                SELECT order_item_id, order_item_name, order_item_type, order_id
-                FROM {$this->tables->order_items}
-                WHERE order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		// Clean template using single quotes and double %i table identifier placeholders.
+		$query = 'INSERT INTO %i (order_item_id, order_item_name, order_item_type, order_id) SELECT order_item_id, order_item_name, order_item_type, order_id FROM %i WHERE order_id = %d';
+		$args  = array( $target_tbl, $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore order items for order #{$order_id}." );
@@ -288,7 +294,7 @@ class RestoreHandler {
 	/**
 	 * Copies all order item meta rows from the archive back into woocommerce_order_itemmeta.
 	 * Joins against the archive order items table to resolve which item IDs belong
-	 * to this order — item meta does not store order_id directly.
+	 * to this order. Item meta does not store order_id directly.
 	 *
 	 * @param int $order_id Order ID whose item meta should be copied.
 	 * @throws \Exception If the insert fails.
@@ -296,20 +302,20 @@ class RestoreHandler {
 	 */
 	private function copy_order_items_meta( int $order_id ): void {
 
-		$order_items_meta_table = $this->wpdb->prefix . 'woocommerce_order_itemmeta';
+		$db           = $this->wpdb;
+		$target_tbl   = $db->prefix . 'woocommerce_order_itemmeta';
+		$src_meta_tbl = $this->tables->order_items_meta;
+		$src_item_tbl = $this->tables->order_items;
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT INTO {$order_items_meta_table}
-                (meta_id, order_item_id, meta_key, meta_value)
-                SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value
-                FROM {$this->tables->order_items_meta} oim
-                INNER JOIN {$this->tables->order_items} oi
-                    ON oim.order_item_id = oi.order_item_id
-                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		// Clean complex layout template passing explicit triple %i table mappings sequentially.
+		$query = 'INSERT INTO %i (meta_id, order_item_id, meta_key, meta_value) SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
+		$args  = array( $target_tbl, $src_meta_tbl, $src_item_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore order item meta for order #{$order_id}." );
@@ -325,22 +331,19 @@ class RestoreHandler {
 	 */
 	private function copy_order_notes( int $order_id ): void {
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT INTO {$this->wpdb->comments}
-                (comment_ID, comment_post_ID, comment_author, comment_author_email,
-                comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
-                comment_content, comment_karma, comment_approved, comment_agent,
-                comment_type, comment_parent, user_id)
-                SELECT comment_ID, comment_post_ID, comment_author, comment_author_email,
-                comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
-                comment_content, comment_karma, comment_approved, comment_agent,
-                comment_type, comment_parent, user_id
-                FROM {$this->tables->order_notes}
-                WHERE comment_post_ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$target_tbl = $db->comments;
+		$source_tbl = $this->tables->order_notes;
+
+		// Clean template using single quotes and isolated double %i identifier placeholders.
+		$query = 'INSERT INTO %i (comment_ID, comment_post_ID, comment_author, comment_author_email, comment_author_url, comment_author_IP, comment_date, comment_date_gmt, comment_content, comment_karma, comment_approved, comment_agent, comment_type, comment_parent, user_id) SELECT comment_ID, comment_post_ID, comment_author, comment_author_email, comment_author_url, comment_author_IP, comment_date, comment_date_gmt, comment_content, comment_karma, comment_approved, comment_agent, comment_type, comment_parent, user_id FROM %i WHERE comment_post_ID = %d';
+		$args  = array( $target_tbl, $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore order notes for order #{$order_id}." );
@@ -358,18 +361,20 @@ class RestoreHandler {
 	 */
 	private function copy_order_notes_meta( int $order_id ): void {
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT INTO {$this->wpdb->commentmeta}
-                (meta_id, comment_id, meta_key, meta_value)
-                SELECT onm.meta_id, onm.comment_id, onm.meta_key, onm.meta_value
-                FROM {$this->tables->order_notes_meta} onm
-                INNER JOIN {$this->tables->order_notes} on_
-                    ON onm.comment_id = on_.comment_ID
-                WHERE on_.comment_post_ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db           = $this->wpdb;
+		$target_tbl   = $db->commentmeta;
+		$src_meta_tbl = $this->tables->order_notes_meta;
+		$src_note_tbl = $this->tables->order_notes;
+
+		// Clean template using single quotes and explicit sequential %i identifier mappings.
+		$query = 'INSERT INTO %i (meta_id, comment_id, meta_key, meta_value) SELECT onm.meta_id, onm.comment_id, onm.meta_key, onm.meta_value FROM %i onm INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID WHERE on_.comment_post_ID = %d';
+		$args  = array( $target_tbl, $src_meta_tbl, $src_note_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore order note meta for order #{$order_id}." );
@@ -385,24 +390,19 @@ class RestoreHandler {
 	 */
 	private function copy_order_refunds( int $order_id ): void {
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT IGNORE INTO {$this->wpdb->posts}
-                (ID, post_author, post_date, post_date_gmt, post_content, post_title,
-                post_excerpt, post_status, comment_status, ping_status, post_password,
-                post_name, to_ping, pinged, post_modified, post_modified_gmt,
-                post_content_filtered, post_parent, guid, menu_order, post_type,
-                post_mime_type, comment_count)
-                SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title,
-                post_excerpt, post_status, comment_status, ping_status, post_password,
-                post_name, to_ping, pinged, post_modified, post_modified_gmt,
-                post_content_filtered, post_parent, guid, menu_order, post_type,
-                post_mime_type, comment_count
-                FROM {$this->tables->order_refunds}
-                WHERE post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$target_tbl = $db->posts;
+		$source_tbl = $this->tables->order_refunds;
+
+		// Clean template layout handling table allocations via %i placeholders.
+		$query = 'INSERT IGNORE INTO %i (ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, comment_status, ping_status, post_password, post_name, to_ping, pinged, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count) SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, comment_status, ping_status, post_password, post_name, to_ping, pinged, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count FROM %i WHERE post_parent = %d';
+		$args  = array( $target_tbl, $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore refunds for order #{$order_id}." );
@@ -418,17 +418,20 @@ class RestoreHandler {
 	 */
 	private function copy_order_refunds_meta( int $order_id ): void {
 
-		$result = $this->wpdb->query(
-			$this->wpdb->prepare(
-				"INSERT IGNORE INTO {$this->wpdb->postmeta}
-                (meta_id, post_id, meta_key, meta_value)
-                SELECT rm.meta_id, rm.post_id, rm.meta_key, rm.meta_value
-                FROM {$this->tables->order_refunds_meta} rm
-                INNER JOIN {$this->tables->order_refunds} r ON rm.post_id = r.ID
-                WHERE r.post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db           = $this->wpdb;
+		$target_tbl   = $db->postmeta;
+		$src_meta_tbl = $this->tables->order_refunds_meta;
+		$src_rfnd_tbl = $this->tables->order_refunds;
+
+		// Clean template using single quotes and triple %i identifier tokens sequentially.
+		$query = 'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value) SELECT rm.meta_id, rm.post_id, rm.meta_key, rm.meta_value FROM %i rm INNER JOIN %i r ON rm.post_id = r.ID WHERE r.post_parent = %d';
+		$args  = array( $target_tbl, $src_meta_tbl, $src_rfnd_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
 			throw new \Exception( "Failed to restore refund meta for order #{$order_id}." );
@@ -440,8 +443,8 @@ class RestoreHandler {
 	 * before we delete anything from the archive tables.
 	 *
 	 * Counts rows in the live tables for this order and compares against
-	 * what was in the archive. If any count mismatches, throws an Exception —
-	 * the calling transaction rolls back and the archive remains untouched.
+	 * what was in the archive. If any count mismatches, throws an Exception.
+	 * The calling transaction rolls back and the archive remains untouched.
 	 *
 	 * @param int $order_id Order ID to verify.
 	 * @throws \Exception If any restored row count does not match the archive.
@@ -449,74 +452,52 @@ class RestoreHandler {
 	 */
 	private function verify_restore_copy( int $order_id ): void {
 
-		$order_items_table      = $this->wpdb->prefix . 'woocommerce_order_items';
-		$order_items_meta_table = $this->wpdb->prefix . 'woocommerce_order_itemmeta';
+		$db                    = $this->wpdb;
+		$live_items_table      = $db->prefix . 'woocommerce_order_items';
+		$live_items_meta_table = $db->prefix . 'woocommerce_order_itemmeta';
+		$live_posts_table      = $db->posts;
+		$live_postmeta_table   = $db->postmeta;
 
-		// Count archive rows — what we expected to restore.
-		$archive_meta = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$this->tables->orders_meta} WHERE post_id = %d",
-				$order_id
-			)
-		);
+		$arc_orders_meta_table   = $this->tables->orders_meta;
+		$arc_order_items_table   = $this->tables->order_items;
+		$arc_items_meta_table    = $this->tables->order_items_meta;
+		$arc_order_refunds_table = $this->tables->order_refunds;
 
-		$archive_items = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$this->tables->order_items} WHERE order_id = %d",
-				$order_id
-			)
-		);
+		// 1. Count archive rows — what we expected to restore.
+		$query        = 'SELECT COUNT(*) FROM %i WHERE post_id = %d';
+		$prepared_sql = $db->prepare( $query, array( $arc_orders_meta_table, $order_id ) );
+		$archive_meta = (int) $db->get_var( $prepared_sql );
 
-		$archive_item_meta = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$this->tables->order_items_meta} oim
-                INNER JOIN {$this->tables->order_items} oi ON oim.order_item_id = oi.order_item_id
-                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$query         = 'SELECT COUNT(*) FROM %i WHERE order_id = %d';
+		$prepared_sql  = $db->prepare( $query, array( $arc_order_items_table, $order_id ) );
+		$archive_items = (int) $db->get_var( $prepared_sql );
 
-		$archive_refunds = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$this->tables->order_refunds} WHERE post_parent = %d",
-				$order_id
-			)
-		);
+		$query             = 'SELECT COUNT(*) FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
+		$prepared_sql      = $db->prepare( $query, array( $arc_items_meta_table, $arc_order_items_table, $order_id ) );
+		$archive_item_meta = (int) $db->get_var( $prepared_sql );
 
-		// Count live rows — what was actually restored.
-		$live_meta = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$this->wpdb->postmeta} WHERE post_id = %d",
-				$order_id
-			)
-		);
+		$query           = 'SELECT COUNT(*) FROM %i WHERE post_parent = %d';
+		$prepared_sql    = $db->prepare( $query, array( $arc_order_refunds_table, $order_id ) );
+		$archive_refunds = (int) $db->get_var( $prepared_sql );
 
-		$live_items = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$order_items_table} WHERE order_id = %d",
-				$order_id
-			)
-		);
+		// 2. Count live rows — what was actually restored.
+		$query        = 'SELECT COUNT(*) FROM %i WHERE post_id = %d';
+		$prepared_sql = $db->prepare( $query, array( $live_postmeta_table, $order_id ) );
+		$live_meta    = (int) $db->get_var( $prepared_sql );
 
-		$live_item_meta = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$order_items_meta_table} oim
-                INNER JOIN {$order_items_table} oi ON oim.order_item_id = oi.order_item_id
-                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$query        = 'SELECT COUNT(*) FROM %i WHERE order_id = %d';
+		$prepared_sql = $db->prepare( $query, array( $live_items_table, $order_id ) );
+		$live_items   = (int) $db->get_var( $prepared_sql );
 
-		$live_refunds = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM {$this->wpdb->posts}
-                WHERE post_parent = %d
-                AND post_type = 'shop_order_refund'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$query          = 'SELECT COUNT(*) FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
+		$prepared_sql   = $db->prepare( $query, array( $live_items_meta_table, $live_items_table, $order_id ) );
+		$live_item_meta = (int) $db->get_var( $prepared_sql );
 
-		// Verify counts match.
+		$query        = "SELECT COUNT(*) FROM %i WHERE post_parent = %d AND post_type = 'shop_order_refund'";
+		$prepared_sql = $db->prepare( $query, array( $live_posts_table, $order_id ) );
+		$live_refunds = (int) $db->get_var( $prepared_sql );
+
+		// 3. Verify counts match.
 		if ( $live_meta !== $archive_meta ) {
 			throw new \Exception(
 				"Restore verification failed for order #{$order_id}: meta rows expected {$archive_meta}, got {$live_meta}."
@@ -544,7 +525,7 @@ class RestoreHandler {
 
 	/**
 	 * Deletes order note meta from the archive notes meta table.
-	 * Must run before delete_order_notes() — depends on woam_order_notes
+	 * Must run before delete_order_notes(). It depends on woam_order_notes
 	 * still containing the comment_post_ID link.
 	 *
 	 * @param int $order_id Order ID whose note meta should be deleted.
@@ -552,15 +533,19 @@ class RestoreHandler {
 	 */
 	private function delete_order_notes_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE onm FROM {$this->tables->order_notes_meta} onm
-                INNER JOIN {$this->tables->order_notes} on_
-                    ON onm.comment_id = on_.comment_ID
-                WHERE on_.comment_post_ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db            = $this->wpdb;
+		$target_tbl    = $this->tables->order_notes_meta;
+		$src_notes_tbl = $this->tables->order_notes;
+
+		// Clean template using single quotes and sequential %i table identifier placeholders.
+		$query = 'DELETE onm FROM %i onm INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID WHERE on_.comment_post_ID = %d';
+		$args  = array( $target_tbl, $src_notes_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -571,18 +556,23 @@ class RestoreHandler {
 	 */
 	private function delete_order_notes( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->order_notes}
-                WHERE comment_post_ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->order_notes;
+
+		// Clean template layout with single quotes and isolated %i token mapping.
+		$query = 'DELETE FROM %i WHERE comment_post_ID = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
 	 * Deletes order item meta from the archive item meta table.
-	 * Must run before delete_order_items() — depends on woam_order_items
+	 * Must run before delete_order_items(). It depends on woam_order_items
 	 * still containing the order_id link.
 	 *
 	 * @param int $order_id Order ID whose item meta should be deleted.
@@ -590,15 +580,19 @@ class RestoreHandler {
 	 */
 	private function delete_order_items_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE oim FROM {$this->tables->order_items_meta} oim
-                INNER JOIN {$this->tables->order_items} oi
-                    ON oim.order_item_id = oi.order_item_id
-                WHERE oi.order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db           = $this->wpdb;
+		$target_tbl   = $this->tables->order_items_meta;
+		$src_item_tbl = $this->tables->order_items;
+
+		// Clean template using single quotes and explicit double %i mappings sequentially.
+		$query = 'DELETE oim FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
+		$args  = array( $target_tbl, $src_item_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -609,13 +603,18 @@ class RestoreHandler {
 	 */
 	private function delete_order_items( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->order_items}
-                WHERE order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->order_items;
+
+		// Clean template layout with single quotes and isolated %i token mapping.
+		$query = 'DELETE FROM %i WHERE order_id = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -626,13 +625,18 @@ class RestoreHandler {
 	 */
 	private function delete_order_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->orders_meta}
-                WHERE post_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->orders_meta;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE post_id = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -644,14 +648,19 @@ class RestoreHandler {
 	 */
 	private function delete_order_refunds_meta( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE rm FROM {$this->tables->order_refunds_meta} rm
-                INNER JOIN {$this->tables->order_refunds} r ON rm.post_id = r.ID
-                WHERE r.post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db           = $this->wpdb;
+		$target_tbl   = $this->tables->order_refunds_meta;
+		$src_rfnd_tbl = $this->tables->order_refunds;
+
+		// Clean join template layout using double %i identifier maps.
+		$query = 'DELETE rm FROM %i rm INNER JOIN %i r ON rm.post_id = r.ID WHERE r.post_parent = %d';
+		$args  = array( $target_tbl, $src_rfnd_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
@@ -662,18 +671,23 @@ class RestoreHandler {
 	 */
 	private function delete_order_refunds( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->order_refunds}
-                WHERE post_parent = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->order_refunds;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE post_parent = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
 	 * Deletes the order row from the archive orders table.
-	 * This is the final delete step — runs last because every other
+	 * This is the final delete step. It runs last because every other
 	 * archive table cleanup depends on this row still being present.
 	 *
 	 * @param int $order_id Order ID to delete from the archive.
@@ -681,13 +695,18 @@ class RestoreHandler {
 	 */
 	private function delete_order_post( int $order_id ): void {
 
-		$this->wpdb->query(
-			$this->wpdb->prepare(
-				"DELETE FROM {$this->tables->orders}
-                WHERE ID = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$order_id
-			)
-		);
+		$db         = $this->wpdb;
+		$source_tbl = $this->tables->orders;
+
+		// Clean template using single quotes and isolated identifier placeholders.
+		$query = 'DELETE FROM %i WHERE ID = %d';
+		$args  = array( $source_tbl, $order_id );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$prepared_sql = $db->prepare( $query, $args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$db->query( $prepared_sql );
 	}
 
 	/**
