@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Archive table name definitions.
  *
@@ -17,7 +16,6 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Class Tables
  */
-
 class Tables {
 
 	/**
