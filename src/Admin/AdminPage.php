@@ -151,7 +151,7 @@ class AdminPage {
 				</button>
 			</nav>
 
-			<div class="woam-panel">
+			<div class="woam-panels-container">
 				<div
 					id="woam-panel-overview"
 					class="woam-panel woam-panel--active"

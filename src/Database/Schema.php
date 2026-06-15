@@ -271,7 +271,7 @@ class Schema {
             post_mime_type varchar(100) NOT NULL DEFAULT '',
             comment_count bigint(20) NOT NULL DEFAULT 0,
             PRIMARY KEY (ID),
-            KEY post_parent (post_parent),
+            KEY post_parent (post_parent)
         ){$charset};";
 	}
 
