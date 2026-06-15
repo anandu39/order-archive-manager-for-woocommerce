@@ -142,6 +142,25 @@ class Plugin {
 	}
 
 	/**
+	 * Add settings link on plugins page.
+	 *
+	 * @param array<string, string> $links Existing plugin action links.
+	 * @return array<string, string> Modified links.
+	 */
+	public function add_settings_link( array $links ): array {
+		$settings_link = sprintf(
+			'<a href="%s">%s</a>',
+			admin_url( 'admin.php?page=woam-dashboard' ),
+			__( 'Settings', 'woo-order-archive-manager' )
+		);
+
+		// Add settings link at the beginning.
+		array_unshift( $links, $settings_link );
+
+		return $links;
+	}
+
+	/**
 	 * Boots the plugin.
 	 * Called once from the main plugin file on plugins_loaded.
 	 *
@@ -152,6 +171,9 @@ class Plugin {
 		if ( ! $this->is_woocommerce_active() ) {
 			return;
 		}
+
+		// Add settings link on plugins page.
+		add_filter( 'plugin_action_links_' . HW_WOAM_BASENAME, array( $this, 'add_settings_link' ) );
 
 		if ( $this->is_hpos_enabled() ) {
 			add_action(
