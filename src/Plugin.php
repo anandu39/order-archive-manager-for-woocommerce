@@ -157,13 +157,19 @@ class Plugin {
 		}
 
 		global $wpdb;
-		$this->tables          = new Database\Tables( $wpdb );
-		$this->schema          = new Database\Schema( $wpdb, $this->tables );
-		$this->logger          = new Logger( $wpdb, $this->tables );
-		$this->archive_handler = new ArchiveHandler( $wpdb, $this->tables, $this->logger );
-		$this->restore_handler = new RestoreHandler( $wpdb, $this->tables, $this->logger );
-		$this->delete_handler  = new DeleteHandler( $wpdb, $this->tables, $this->logger );
-		$this->ajax_handler    = new AjaxHandler( $this->archive_handler, $this->restore_handler, $this->delete_handler );
+		$this->tables            = new Database\Tables( $wpdb );
+		$this->schema            = new Database\Schema( $wpdb, $this->tables );
+		$this->logger            = new Logger( $wpdb, $this->tables );
+		$this->archive_handler   = new ArchiveHandler( $wpdb, $this->tables, $this->logger );
+		$this->restore_handler   = new RestoreHandler( $wpdb, $this->tables, $this->logger );
+		$this->delete_handler    = new DeleteHandler( $wpdb, $this->tables, $this->logger );
+		$this->analytics_handler = new AnalyticsHandler( $wpdb );
+		$this->ajax_handler      = new AjaxHandler(
+			$this->archive_handler,
+			$this->restore_handler,
+			$this->delete_handler,
+			$this->analytics_handler
+		);
 
 		if ( is_admin() ) {
 			$this->admin_page = new AdminPage();

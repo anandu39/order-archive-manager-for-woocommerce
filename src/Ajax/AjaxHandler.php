@@ -1,10 +1,6 @@
 <?php
 /**
- *
  * Ajax Handler
- * Bridge between the admin UI and ArchiveHandler, RestoreHandler and DeleteHandler.
- * Each endpoints verify nonce + capability, prevent concurrent jobs via
- * a transient lock, runs one batch, and return a JSON summary.
  *
  * @package HW\WOAM\Ajax
  */
@@ -14,79 +10,80 @@ namespace HW\WOAM\Ajax;
 use HW\WOAM\Archive\ArchiveHandler;
 use HW\WOAM\Archive\RestoreHandler;
 use HW\WOAM\Archive\DeleteHandler;
+use HW\WOAM\Analytics\AnalyticsHandler;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- *
  * Class AjaxHandler
  */
 class AjaxHandler {
 
 	/**
-	 *
 	 * Archive Handler.
 	 *
 	 * @var ArchiveHandler
 	 */
-
 	private ArchiveHandler $archive_handler;
 
 	/**
-	 *
-	 * Restore Handler
+	 * Restore Handler.
 	 *
 	 * @var RestoreHandler
 	 */
-
 	private RestoreHandler $restore_handler;
 
 	/**
-	 *
-	 * Delete Handler
+	 * Delete Handler.
 	 *
 	 * @var DeleteHandler
 	 */
-
 	private DeleteHandler $delete_handler;
+
+	/**
+	 * Analytics Handler.
+	 *
+	 * @var AnalyticsHandler
+	 */
+	private AnalyticsHandler $analytics_handler;
 
 	/**
 	 * Transient key used to prevent concurrent batch jobs.
 	 */
-
 	private const LOCK_KEY = 'hw_woam_job_running';
 
 	/**
-	 * Lock lifetime in seconds. Acts as a safety timeout —
-	 * if a request dies mid-batch, the lock self-clears after this.
+	 * Lock lifetime in seconds.
 	 */
-
 	private const LOCK_TTL = 300;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param ArchiveHandler $archive_handler Archive handler.
-	 * @param RestoreHandler $restore_handler Restore handler.
-	 * @param DeleteHandler  $delete_handler  Delete handler.
+	 * @param ArchiveHandler   $archive_handler   Archive handler.
+	 * @param RestoreHandler   $restore_handler   Restore handler.
+	 * @param DeleteHandler    $delete_handler    Delete handler.
+	 * @param AnalyticsHandler $analytics_handler Analytics handler.
 	 */
 	public function __construct(
 		ArchiveHandler $archive_handler,
 		RestoreHandler $restore_handler,
-		DeleteHandler $delete_handler
+		DeleteHandler $delete_handler,
+		AnalyticsHandler $analytics_handler
 	) {
-		$this->archive_handler = $archive_handler;
-		$this->restore_handler = $restore_handler;
-		$this->delete_handler  = $delete_handler;
+		$this->archive_handler   = $archive_handler;
+		$this->restore_handler   = $restore_handler;
+		$this->delete_handler    = $delete_handler;
+		$this->analytics_handler = $analytics_handler;
 	}
 
 	/**
 	 * Registers all wp_ajax_ hooks.
-	 * Called once from Plugin::boot().
 	 *
 	 * @return void
 	 */
 	public function register_hooks(): void {
+		// Existing hooks.
 		add_action( 'wp_ajax_hw_woam_get_count', array( $this, 'handle_get_count' ) );
 		add_action( 'wp_ajax_hw_woam_archive_batch', array( $this, 'handle_archive_batch' ) );
 		add_action( 'wp_ajax_hw_woam_restore_batch', array( $this, 'handle_restore_batch' ) );
@@ -97,6 +94,52 @@ class AjaxHandler {
 		add_action( 'wp_ajax_hw_woam_get_recent_activity', array( $this, 'handle_get_recent_activity' ) );
 		add_action( 'wp_ajax_hw_woam_get_archive_breakdown', array( $this, 'handle_get_archive_breakdown' ) );
 		add_action( 'wp_ajax_hw_woam_run_integrity_check', array( $this, 'handle_run_integrity_check' ) );
+
+		// New analytics hooks.
+		add_action( 'wp_ajax_hw_woam_get_health_score', array( $this, 'handle_get_health_score' ) );
+		add_action( 'wp_ajax_hw_woam_get_lifetime_stats', array( $this, 'handle_get_lifetime_stats' ) );
+		add_action( 'wp_ajax_hw_woam_get_recommendations', array( $this, 'handle_get_recommendations' ) );
+		add_action( 'wp_ajax_hw_woam_get_archive_readiness', array( $this, 'handle_get_archive_readiness' ) );
+	}
+
+	/**
+	 * Handle get health score request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_health_score(): void {
+		$this->verify_request();
+		wp_send_json_success( $this->analytics_handler->get_health_score() );
+	}
+
+	/**
+	 * Handle get lifetime stats request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_lifetime_stats(): void {
+		$this->verify_request();
+		wp_send_json_success( $this->analytics_handler->get_lifetime_stats() );
+	}
+
+	/**
+	 * Handle get recommendations request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_recommendations(): void {
+		$this->verify_request();
+		wp_send_json_success( $this->analytics_handler->get_recommendations() );
+	}
+
+	/**
+	 * Handle get archive readiness request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_archive_readiness(): void {
+		$this->verify_request();
+		wp_send_json_success( $this->analytics_handler->get_archive_readiness() );
 	}
 
 	/**

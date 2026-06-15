@@ -837,5 +837,49 @@ class AnalyticsHandler {
 
 	/**
 	 * Formats a price value for display.
-	*/
+	 *
+	 * @param float $price Price value.
+	 * @return string Formatted price.
+	 */
+	private function format_price( float $price ): string {
+		$currency_symbol = function_exists( 'get_woocommerce_currency_symbol' )
+			? get_woocommerce_currency_symbol()
+			: '$';
+
+		return $currency_symbol . number_format( $price, 0 );
+	}
+
+	/**
+	 * Gets human-readable label for health status.
+	 *
+	 * @param string $status Status key.
+	 * @return string Label.
+	 */
+	private function get_health_status_label( string $status ): string {
+		$labels = array(
+			'excellent' => __( 'Excellent', 'woo-order-archive-manager' ),
+			'good'      => __( 'Good', 'woo-order-archive-manager' ),
+			'fair'      => __( 'Fair', 'woo-order-archive-manager' ),
+			'poor'      => __( 'Poor', 'woo-order-archive-manager' ),
+			'critical'  => __( 'Critical', 'woo-order-archive-manager' ),
+		);
+
+		return $labels[ $status ] ?? __( 'Unknown', 'woo-order-archive-manager' );
+	}
+
+	/**
+	 * Gets human-readable label for confidence level.
+	 *
+	 * @param string $confidence Confidence key.
+	 * @return string Label.
+	 */
+	private function get_confidence_label( string $confidence ): string {
+		$labels = array(
+			'high'   => __( 'High confidence', 'woo-order-archive-manager' ),
+			'medium' => __( 'Medium confidence', 'woo-order-archive-manager' ),
+			'low'    => __( 'Low confidence', 'woo-order-archive-manager' ),
+		);
+
+		return $labels[ $confidence ] ?? __( 'Unknown', 'woo-order-archive-manager' );
+	}
 }
