@@ -66,6 +66,60 @@
     }
 
     /**
+     * Update header subtext based on store status
+     * This runs independently of tabs - loads immediately on page load
+     */
+    async function updateHeaderSubtext() {
+        const subtextEl = document.getElementById('woam-header-subtext');
+        if (!subtextEl) return;
+        
+        try {
+            const data = await woamPost('hw_woam_get_db_stats');
+            const totalBytes = data.total_bytes;
+            const totalFormatted = data.total_formatted;
+            
+            // Get order count
+            const orderData = await woamPost('hw_woam_get_archive_breakdown');
+            const totalArchived = orderData.total_count || 0;
+            
+            let icon = '';
+            let message = '';
+            
+            if (totalArchived === 0 && totalBytes > 100 * 1024 * 1024) { // >100MB
+                icon = '<span class="dashicons dashicons-warning"></span>';
+                message = `Your database is using ${totalFormatted} of order data. Archive old orders to improve performance.`;
+            } else if (totalArchived === 0) {
+                icon = '<span class="dashicons dashicons-archive"></span>';
+                message = 'Ready to archive? Move completed orders to archive tables and keep WooCommerce fast.';
+            } else if (totalArchived > 0 && totalBytes > 500 * 1024 * 1024) { // >500MB
+                icon = '<span class="dashicons dashicons-yes-alt"></span>';
+                message = `You've archived ${formatNumber(totalArchived)} orders, saving valuable database space. Keep going!`;
+            } else {
+                icon = '<span class="dashicons dashicons-dashboard"></span>';
+                message = 'Keep WooCommerce fast as your store grows — archive orders safely without losing data.';
+            }
+            
+            subtextEl.innerHTML = `${icon} ${message}`;
+            
+        } catch (err) {
+            console.error('Failed to update header subtext:', err);
+            subtextEl.innerHTML = '<span class="dashicons dashicons-info"></span> Reduce database bloat, improve admin performance, and restore archived orders anytime with one click.';
+        }
+    }
+
+    /**
+     * Update header subtext on Overview tab load (refresh data when coming back)
+     * This ensures data stays current if user switches away and back
+     */
+    async function refreshHeaderSubtext() {
+        // Only refresh if we're on overview tab
+        const overviewPanel = document.getElementById('woam-panel-overview');
+        if (overviewPanel && overviewPanel.classList.contains('woam-panel--active')) {
+            await updateHeaderSubtext();
+        }
+    }
+
+    /**
      * HTML escaping function
      */
     function escHtml(str) {
@@ -473,6 +527,7 @@
      */
     async function loadOverviewTab() {
         await Promise.allSettled([
+            refreshHeaderSubtext(),
             loadHealthScore(),
             loadRecommendations(),
             loadLifetimeStats(),
@@ -1447,6 +1502,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         initTabs();
         initHeroButtons();
+        updateHeaderSubtext();
         loadOverviewTab();
         initArchiveTab();
         initArchivedTab();

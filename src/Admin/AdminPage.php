@@ -115,8 +115,11 @@ class AdminPage {
 
 		<div class="wrap woam-wrap woam-onboarding-ready">
 			<div class="woam-header">
-				<h1> <?php esc_html_e( 'Order Archive Manager', 'woo-order-archive-manager' ); ?></h1>
-				<p> <?php esc_html_e( 'Archive, restore and manager your WooCommerce data', 'woo-order-archive-manager' ); ?></p>
+				<h1><?php esc_html_e( 'Order Archive Manager', 'woo-order-archive-manager' ); ?></h1>
+				<p id="woam-header-subtext" class="woam-header-subtext">
+					<span class="dashicons dashicons-update spin" style="font-size: 14px; width: 14px; height: 14px; margin-right: 6px;"></span>
+					<?php esc_html_e( 'Loading store insights...', 'woo-order-archive-manager' ); ?>
+				</p>
 			</div>
 
 			<nav class ="woam-tabs" role ="tablist">

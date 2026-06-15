@@ -15,6 +15,7 @@ use HW\WOAM\Archive\RestoreHandler;
 use HW\WOAM\Archive\DeleteHandler;
 use HW\WOAM\Ajax\AjaxHandler;
 use HW\WOAM\Admin\AdminPage;
+use HW\WOAM\Analytics\AnalyticsHandler;
 use HW\WOAM\Admin\Onboarding;
 
 
@@ -93,6 +94,13 @@ class Plugin {
 	 */
 
 	private AdminPage $admin_page;
+
+	/**
+	 * Analtyics Page
+	 *
+	 * @var AnalyticsHandler
+	 */
+	private AnalyticsHandler $analytics_handler;
 
 	/**
 	 * Onboarding Page
