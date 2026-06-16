@@ -1,6 +1,6 @@
 === Woo Order Archive Manager ===
-Contributors: anandurk
-Tags: woocommerce, orders, archive, database, performance
+Contributors: ananduravi
+Tags: woocommerce, orders, archive, database, performance, optimization, cleanup
 Requires at least: 5.0
 Tested up to: 7.0
 Requires PHP: 8.2
@@ -14,27 +14,27 @@ Archive old WooCommerce orders into separate database tables to keep your store 
 
 Over time, WooCommerce orders pile up in your database. Every order adds rows to `wp_posts`, `wp_postmeta`, `wp_comments`, and several WooCommerce tables. On stores with tens of thousands of orders, this slows down admin pages, checkout queries, and report generation.
 
-Woo Order Archive Manager moves completed, cancelled, or refunded orders out of the live tables and into dedicated archive tables. Your store gets faster, your order data stays safe, and you can restore any order back to WooCommerce whenever you need it.
+**Woo Order Archive Manager** moves completed, cancelled, or refunded orders out of the live tables and into dedicated archive tables. Your store gets faster, your order data stays safe, and you can restore any order back to WooCommerce whenever you need it.
 
-**How it works**
+= How it works =
 
 Orders are copied to archive tables row by row inside database transactions. If anything goes wrong during the copy, the transaction rolls back — the original order is untouched. Only after a successful copy and verification does the plugin remove the order from the live tables.
 
-**Key features**
+= Key features =
 
-* Moves orders to dedicated archive tables — not just a status change
-* Restores archived orders back to WooCommerce with the original order ID preserved
-* Permanently deletes archived orders when you no longer need them
-* Dry run mode — preview exactly what will happen before making any changes
-* Verification layer — row counts are checked before any live data is deleted
-* Refund support — refund posts and their meta are archived alongside the parent order
-* Subscription protection — orders linked to active WooCommerce Subscriptions are skipped automatically
-* Activity log — every archive, restore, and delete is recorded with timestamps
-* Database visualiser — see how much space your order tables are actually using
-* Archive health check — verifies table integrity and flags any orphaned rows
-* Batch processing — handles large stores without timing out
+* **Safe Archiving** - Moves orders to dedicated archive tables using database transactions
+* **One-Click Restore** - Restores archived orders back to WooCommerce with original IDs preserved
+* **Permanent Deletion** - Permanently deletes archived orders when you no longer need them
+* **Dry Run Mode** - Preview exactly what will happen before making any changes
+* **Verification Layer** - Row counts are checked before any live data is deleted
+* **Refund Support** - Refund posts and their meta are archived alongside the parent order
+* **Subscription Protection** - Orders linked to active WooCommerce Subscriptions are skipped automatically
+* **Activity Log** - Every archive, restore, and delete is recorded with timestamps
+* **Database Visualiser** - See how much space your order tables are actually using
+* **Archive Health Check** - Verifies table integrity and flags any orphaned rows
+* **Batch Processing** - Handles large stores without timing out
 
-**What gets archived**
+= What gets archived =
 
 When an order is archived, the following data moves with it:
 
@@ -46,11 +46,19 @@ When an order is archived, the following data moves with it:
 * Order note meta (`wp_commentmeta`)
 * Refund posts and their meta
 
-**Compatibility**
+= Compatibility =
 
-This version supports legacy post-based order storage only. Stores using WooCommerce High-Performance Order Storage (HPOS) will see an admin notice and the plugin will remain inactive. HPOS support is planned for a future release.
+**HPOS Support** - This version supports legacy post-based order storage only. Stores using WooCommerce High-Performance Order Storage (HPOS) will see an admin notice and the plugin will remain inactive. HPOS support is planned for a future release.
 
-WooCommerce Subscriptions is detected automatically. Orders linked to active subscriptions are skipped during archiving to avoid breaking renewal billing.
+**WooCommerce Subscriptions** - Detected automatically. Orders linked to active subscriptions are skipped during archiving to avoid breaking renewal billing.
+
+= Why choose Woo Order Archive Manager? =
+
+Unlike plugins that only change order status or soft-delete orders, this plugin physically moves order data to separate tables. Your live database tables stay lean and fast, while archived data remains fully restorable.
+
+= Created by Anandu Ravikumar =
+
+Developed by a WooCommerce expert focused on database optimization and performance.
 
 == Installation ==
 
@@ -60,7 +68,7 @@ WooCommerce Subscriptions is detected automatically. Orders linked to active sub
 4. Review the Overview tab to see your current database usage
 5. Go to the Archive Orders tab to start your first archive
 
-**Requirements**
+= Requirements =
 
 * WordPress 5.0 or higher
 * WooCommerce (latest recommended)
@@ -105,12 +113,21 @@ Yes. Add this to your theme's `functions.php` or a custom plugin:
 
 The default is 50 orders per batch. Increase it on fast servers, decrease it on shared hosting if you see timeouts.
 
+= How do I know if my database is compatible? =
+
+The plugin requires MySQL InnoDB engine for transaction support. Most modern WordPress installations use InnoDB by default. You can check your table engine in phpMyAdmin.
+
+= Will this work with caching plugins? =
+
+Yes. The plugin operates directly on database tables and doesn't interfere with page caching.
+
 == Screenshots ==
 
-1. Overview tab showing database size and archive health
+1. Overview tab showing database health score and storage composition
 2. Archive Orders step flow — select filters and review impact before running
 3. Archived Orders tab with inventory breakdown and restore/delete controls
-4. Activity log showing recent archive and restore operations
+4. Database visualizer showing table size breakdown
+5. Activity log showing recent archive and restore operations
 
 == Changelog ==
 
@@ -126,8 +143,22 @@ The default is 50 orders per batch. Increase it on fast servers, decrease it on 
 * Archive health and integrity checker
 * Batch processing with configurable batch size
 * Full activity log
+* Onboarding wizard for first-time users
+* Real-time savings estimation
 
 == Upgrade Notice ==
 
 = 1.0.0 =
 Initial release. No upgrade steps required.
+
+== Support ==
+
+For support, feature requests, or bug reports, please visit the [GitHub repository](https://github.com/anandu39/woo-order-archive-manager).
+
+== Credits ==
+
+Developed by [Anandu Ravikumar](https://anandu39.github.io/Anandu-Ravikumar/)
+
+== License ==
+
+GPL-2.0-or-later – https://www.gnu.org/licenses/gpl-2.0.html
