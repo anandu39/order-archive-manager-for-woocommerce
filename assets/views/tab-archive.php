@@ -83,6 +83,85 @@ $order_statuses = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_stat
             </div>
         </div>
 
+        <!-- ============================================================ -->
+        <!-- DEDICATED SUBSCRIPTION SECTION                                 -->
+        <!-- ============================================================ -->
+        <div class="woam-subscription-section" style="margin: 24px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span class="dashicons dashicons-cart" style="color: #7f54b3; font-size: 20px;"></span>
+                <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d2327;">
+                    <?php esc_html_e( 'Subscription Orders', 'woo-order-archive-manager' ); ?>
+                </h3>
+                <span style="margin-left: auto; font-size: 11px; color: #646970; background: #f0f0f1; padding: 2px 10px; border-radius: 4px;">
+                    <?php esc_html_e( 'Protected orders are skipped automatically', 'woo-order-archive-manager' ); ?>
+                </span>
+            </div>
+            
+            <!-- Subscription Legend -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                <div style="background: #e6f4ea; padding: 10px 14px; border-radius: 4px; border-left: 3px solid #2ea64a;">
+                    <strong style="color: #1a4d2a; font-size: 12px;"><?php esc_html_e( 'Safe to Archive', 'woo-order-archive-manager' ); ?></strong>
+                    <ul style="margin: 4px 0 0 16px; font-size: 12px; color: #1a4d2a;">
+                        <li><?php esc_html_e( 'Cancelled subscriptions', 'woo-order-archive-manager' ); ?></li>
+                        <li><?php esc_html_e( 'Expired subscriptions', 'woo-order-archive-manager' ); ?></li>
+                        <li><?php esc_html_e( 'Failed subscriptions', 'woo-order-archive-manager' ); ?></li>
+                    </ul>
+                </div>
+                <div style="background: #fdf0f0; padding: 10px 14px; border-radius: 4px; border-left: 3px solid #d63638;">
+                    <strong style="color: #5c0000; font-size: 12px;"><?php esc_html_e( 'Protected - Never Archive', 'woo-order-archive-manager' ); ?></strong>
+                    <ul style="margin: 4px 0 0 16px; font-size: 12px; color: #5c0000;">
+                        <li><?php esc_html_e( 'Active subscriptions', 'woo-order-archive-manager' ); ?></li>
+                        <li><?php esc_html_e( 'Pending cancel', 'woo-order-archive-manager' ); ?></li>
+                        <li><?php esc_html_e( 'On hold subscriptions', 'woo-order-archive-manager' ); ?></li>
+                        <li><?php esc_html_e( 'Renewal orders for active subscriptions', 'woo-order-archive-manager' ); ?></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Subscription Filters -->
+            <div class="woam-field-group" style="margin-bottom: 0;">
+                <label style="font-size: 13px; font-weight: 600;">
+                    <?php esc_html_e( 'Subscription status to include', 'woo-order-archive-manager' ); ?>
+                </label>
+                <div class="woam-checkbox-grid" id="woam-subscription-statuses">
+                    <label class="woam-checkbox">
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-active" disabled checked>
+                        <?php esc_html_e( 'Active', 'woo-order-archive-manager' ); ?>
+                        <span class="woam-checkbox-count">(<?php esc_html_e( 'protected', 'woo-order-archive-manager' ); ?>)</span>
+                    </label>
+                    <label class="woam-checkbox">
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-cancelled">
+                        <?php esc_html_e( 'Cancelled', 'woo-order-archive-manager' ); ?>
+                        <span class="woam-checkbox-count">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
+                    </label>
+                    <label class="woam-checkbox">
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-expired">
+                        <?php esc_html_e( 'Expired', 'woo-order-archive-manager' ); ?>
+                        <span class="woam-checkbox-count">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
+                    </label>
+                    <label class="woam-checkbox">
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-on-hold" disabled checked>
+                        <?php esc_html_e( 'On Hold', 'woo-order-archive-manager' ); ?>
+                        <span class="woam-checkbox-count">(<?php esc_html_e( 'protected', 'woo-order-archive-manager' ); ?>)</span>
+                    </label>
+                    <label class="woam-checkbox">
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-pending-cancel" disabled checked>
+                        <?php esc_html_e( 'Pending Cancel', 'woo-order-archive-manager' ); ?>
+                        <span class="woam-checkbox-count">(<?php esc_html_e( 'protected', 'woo-order-archive-manager' ); ?>)</span>
+                    </label>
+                    <label class="woam-checkbox">
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-failed">
+                        <?php esc_html_e( 'Failed', 'woo-order-archive-manager' ); ?>
+                        <span class="woam-checkbox-count">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
+                    </label>
+                </div>
+                <p style="font-size: 11px; color: #646970; margin-top: 8px;">
+                    <span class="dashicons dashicons-info" style="font-size: 14px;"></span>
+                    <?php esc_html_e( 'Protected subscription orders will be automatically skipped during archiving.', 'woo-order-archive-manager' ); ?>
+                </p>
+            </div>
+        </div>
+
         <!-- Select/Deselect All buttons (NEW) -->
         <div class="woam-bulk-actions">
             <button type="button" class="woam-bulk-btn" data-select-all-statuses>

@@ -94,6 +94,7 @@ class AjaxHandler {
 		add_action( 'wp_ajax_hw_woam_get_recent_activity', array( $this, 'handle_get_recent_activity' ) );
 		add_action( 'wp_ajax_hw_woam_get_archive_breakdown', array( $this, 'handle_get_archive_breakdown' ) );
 		add_action( 'wp_ajax_hw_woam_run_integrity_check', array( $this, 'handle_run_integrity_check' ) );
+		add_action( 'wp_ajax_hw_woam_get_subscription_stats', array( $this, 'handle_get_subscription_stats' ) );
 
 		// New analytics hooks.
 		add_action( 'wp_ajax_hw_woam_get_health_score', array( $this, 'handle_get_health_score' ) );
@@ -142,7 +143,7 @@ class AjaxHandler {
 		$this->verify_request();
 		wp_send_json_success( $this->analytics_handler->get_archive_readiness() );
 	}
-
+	
 	/**
 	 * Handle get growth forecast request.
 	 *
@@ -153,8 +154,8 @@ class AjaxHandler {
 
 		global $wpdb;
 
-		// Get current database size.
-		$current_size = $this->get_db_stats_array()['total_bytes'] ?? 0;
+		// Get current database size - FIXED: use analytics_handler
+		$current_size = $this->analytics_handler->get_db_stats_array()['total_bytes'] ?? 0;
 
 		// Get monthly growth rate from analytics handler.
 		$monthly_growth_mb = $this->analytics_handler->get_monthly_growth_rate_mb();
@@ -876,16 +877,91 @@ class AjaxHandler {
 	}
 
 	/**
-	 * Checks the archive tables for orphaned rows — meta, items, or notes
-	 * that reference an order ID no longer present in woam_orders.
-	 *
-	 * This should normally return zero orphans since all operations run
-	 * inside transactions. Provided as a diagnostic tool for the admin.
-	 *
-	 * Expects POST: nonce
+	 * Handle get subscription stats request.
 	 *
 	 * @return void
 	 */
+	public function handle_get_subscription_stats(): void {
+		$this->verify_request();
+		
+		global $wpdb;
+		
+		if ( ! class_exists( 'WC_Subscriptions' ) ) {
+			wp_send_json_success( array(
+				'subscriptions_active' => false,
+				'message'              => 'WooCommerce Subscriptions is not active',
+			) );
+			return;
+		}
+		
+		// Get subscription counts by status
+		$statuses = array( 'wc-active', 'wc-cancelled', 'wc-expired', 'wc-on-hold', 'wc-pending-cancel', 'wc-failed' );
+		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT post_status, COUNT(*) as count 
+				FROM %i 
+				WHERE post_type = 'shop_subscription' 
+				AND post_status IN ({$placeholders})
+				GROUP BY post_status",
+				array_merge( array( $wpdb->posts ), $statuses )
+			)
+		);
+		
+		$stats = array(
+			'total_subscriptions' => 0,
+			'active'              => 0,
+			'cancelled'           => 0,
+			'expired'             => 0,
+			'on_hold'             => 0,
+			'pending_cancel'      => 0,
+			'failed'              => 0,
+			'protected_orders'    => 0,
+			'archivable_orders'   => 0,
+			'subscriptions_active' => true,
+		);
+		
+		foreach ( $results as $row ) {
+			$status = str_replace( 'wc-', '', $row->post_status );
+			if ( isset( $stats[ $status ] ) ) {
+				$stats[ $status ] = (int) $row->count;
+			}
+			$stats['total_subscriptions'] += (int) $row->count;
+		}
+		
+		// Count protected orders (active subscriptions that shouldn't be archived)
+		$protected_statuses = array( 'wc-active', 'wc-pending-cancel', 'wc-on-hold' );
+		$placeholders = implode( ', ', array_fill( 0, count( $protected_statuses ), '%s' ) );
+		
+		$stats['protected_orders'] = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(DISTINCT post_parent) 
+				FROM %i 
+				WHERE post_type = 'shop_subscription' 
+				AND post_status IN ({$placeholders})
+				AND post_parent > 0",
+				array_merge( array( $wpdb->posts ), $protected_statuses )
+			)
+		);
+		
+		// Count archivable orders (cancelled, expired, failed subscriptions)
+		$archivable_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed' );
+		$placeholders = implode( ', ', array_fill( 0, count( $archivable_statuses ), '%s' ) );
+		
+		$stats['archivable_orders'] = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(DISTINCT post_parent) 
+				FROM %i 
+				WHERE post_type = 'shop_subscription' 
+				AND post_status IN ({$placeholders})
+				AND post_parent > 0",
+				array_merge( array( $wpdb->posts ), $archivable_statuses )
+			)
+		);
+		
+		wp_send_json_success( $stats );
+	}
 	/**
 	 * Checks the archive tables for orphaned rows — meta, items, or notes
 	 * that reference an order ID no longer present in woam_orders.

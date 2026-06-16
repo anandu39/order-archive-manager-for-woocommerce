@@ -77,19 +77,13 @@ class ArchiveHandler {
 			return 0; // No statuses means no orders to archive.
 		}
 
-		// Generate the layout structural placeholder for the dynamic list of statuses (e.g. "%s,%s").
 		$in_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
 
-		// 1. Isolate the string to stop the sniffer from misinterpreting internal method calls as raw text.
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$query = "SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders})";
 
-		// 2. Compile the parameters into a clean, tracking-friendly array.
 		$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses );
 
-		// 3. Prepare and run without nested syntax confusion.
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $this->wpdb->prepare( $query, $params );
+		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return (int) $this->wpdb->get_var( $prepared_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
@@ -107,21 +101,14 @@ class ArchiveHandler {
 			return array();
 		}
 
-		// Generate the structural placeholders syntax pattern for the dynamic status array.
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		// 1. Isolate the SQL layout blueprint using %i to strip out internal object calls.
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}) ORDER BY ID ASC LIMIT %d";
 
-		// 2. Flatten the input parameters array to keep matching lookups simple.
 		$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses, array( $this->batch_size ) );
 
-		// 3. Compile the fully escaped query.
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $this->wpdb->prepare( $query, $params );
+		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
-		// 4. Execute query using native database abstractions cleanly.
 		return array_map( 'intval', $this->wpdb->get_col( $prepared_sql ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
@@ -148,14 +135,9 @@ class ArchiveHandler {
 			return false;
 		}
 
-		// ---------------------------------------------------------------------
 		// Check 1 - is the order a renewal or resubscribe order?
-		// ---------------------------------------------------------------------
-
-		// Isolate query using single quotes and identifier placeholder.
 		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
 
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
 
 		$renewal_meta = $this->wpdb->get_var( $prepared_meta_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -164,19 +146,137 @@ class ArchiveHandler {
 			return true;
 		}
 
-		// ---------------------------------------------------------------------
 		// Check 2 - does any active subscription have this order as its parent?
-		// ---------------------------------------------------------------------
-
-		// Isolate query using single quotes and identifier placeholder.
 		$query_subs = 'SELECT ID FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' AND post_status IN (\'wc-active\',\'wc-pending-cancel\') LIMIT 1';
 
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$prepared_subs_sql = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
 
 		$active_subscription = $this->wpdb->get_var( $prepared_subs_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return (bool) $active_subscription;
+	}
+
+	/**
+	 * Get detailed subscription status for an order.
+	 *
+	 * @param int $order_id Order ID to check.
+	 * @return array{is_linked: bool, reason: string, subscription_status: string|null, is_safe: bool}
+	 */
+	private function get_subscription_status( int $order_id ): array {
+		// If WooCommerce Subscriptions isn't active, return not linked.
+		if ( ! class_exists( 'WC_Subscriptions' ) ) {
+			return array(
+				'is_linked'           => false,
+				'reason'              => 'Subscriptions plugin not active',
+				'subscription_status' => null,
+				'is_safe'             => true,
+			);
+		}
+
+		// Check 1 - Is the order a renewal or resubscribe order?
+		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
+		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
+		$renewal_meta = $this->wpdb->get_var( $prepared_meta_sql );
+
+		if ( $renewal_meta ) {
+			return array(
+				'is_linked'           => true,
+				'reason'              => 'This is a renewal or resubscribe order',
+				'subscription_status' => 'renewal',
+				'is_safe'             => false,
+			);
+		}
+
+		// Check 2 - Does any subscription have this order as its parent?
+		$query_subs = 'SELECT post_status FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' LIMIT 1';
+		$prepared_subs_sql = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
+		$subscription_status = $this->wpdb->get_var( $prepared_subs_sql );
+
+		if ( $subscription_status ) {
+			// Statuses safe to archive.
+			$safe_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed', 'wc-trash' );
+			
+			if ( in_array( $subscription_status, $safe_statuses, true ) ) {
+				return array(
+					'is_linked'           => false,
+					'reason'              => 'Subscription is ' . $subscription_status . ' (safe to archive)',
+					'subscription_status' => $subscription_status,
+					'is_safe'             => true,
+				);
+			} else {
+				return array(
+					'is_linked'           => true,
+					'reason'              => 'Order has active or pending subscription: ' . $subscription_status,
+					'subscription_status' => $subscription_status,
+					'is_safe'             => false,
+				);
+			}
+		}
+
+		return array(
+			'is_linked'           => false,
+			'reason'              => 'No subscription linked',
+			'subscription_status' => null,
+			'is_safe'             => true,
+		);
+	}
+
+	/**
+	 * Check if an order is safe to archive.
+	 *
+	 * @param int $order_id Order ID to check.
+	 * @return bool
+	 */
+	private function is_safe_to_archive( int $order_id ): bool {
+		$status = $this->get_subscription_status( $order_id );
+		return $status['is_safe'];
+	}
+
+	/**
+	 * Get all subscription orders with their status for display.
+	 *
+	 * @param string $status_filter Optional status filter.
+	 * @return array<int, array>
+	 */
+	public function get_subscription_orders( string $status_filter = '' ): array {
+		global $wpdb;
+		
+		if ( ! class_exists( 'WC_Subscriptions' ) ) {
+			return array();
+		}
+		
+		$status_condition = '';
+		if ( ! empty( $status_filter ) ) {
+			$status_condition = $wpdb->prepare( ' AND post_status = %s', $status_filter );
+		}
+		
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.ID, p.post_status, p.post_date, 
+						s.post_status as subscription_status
+				FROM %i p
+				INNER JOIN %i s ON s.post_parent = p.ID
+				WHERE p.post_type = 'shop_order'
+				AND s.post_type = 'shop_subscription'
+				{$status_condition}
+				ORDER BY p.post_date DESC
+				LIMIT 100",
+				$wpdb->posts,
+				$wpdb->posts
+			)
+		);
+		
+		$orders = array();
+		foreach ( $results as $row ) {
+			$orders[] = array(
+				'order_id'            => (int) $row->ID,
+				'order_status'        => $row->post_status,
+				'order_date'          => $row->post_date,
+				'subscription_status' => $row->subscription_status,
+			);
+		}
+		
+		return $orders;
 	}
 
 	/**

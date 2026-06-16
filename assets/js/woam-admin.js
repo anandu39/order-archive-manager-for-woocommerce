@@ -435,6 +435,61 @@
     }
 
     /**
+     * Loads subscription statistics for the Overview tab
+     */
+    async function loadSubscriptionStats() {
+        const container = document.getElementById('woam-subscription-stats');
+        if (!container) return;
+
+        try {
+            const data = await woamPost('hw_woam_get_subscription_stats');
+            
+            if (!data.subscriptions_active) {
+                container.innerHTML = `
+                    <div class="woam-empty-state" style="padding: 20px;">
+                        <span class="dashicons dashicons-cart" style="font-size: 32px; color: #646970;"></span>
+                        <p style="margin-top: 8px; font-size: 13px; color: #646970;">WooCommerce Subscriptions not active</p>
+                    </div>
+                `;
+                container.classList.remove('woam-loading');
+                return;
+            }
+            
+            const html = `
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                    <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #7f54b3;">${formatNumber(data.total_subscriptions)}</div>
+                        <div style="font-size: 11px; color: #646970;">Total Subscriptions</div>
+                    </div>
+                    <div style="background: #e6f4ea; padding: 12px; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #2ea64a;">${formatNumber(data.active)}</div>
+                        <div style="font-size: 11px; color: #1a4d2a;">Active</div>
+                    </div>
+                    <div style="background: #fef9e7; padding: 12px; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #dba617;">${formatNumber(data.on_hold + data.pending_cancel)}</div>
+                        <div style="font-size: 11px; color: #5c4000;">On Hold / Pending</div>
+                    </div>
+                    <div style="background: #f0f0f1; padding: 12px; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 20px; font-weight: 700; color: #646970;">${formatNumber(data.archivable_orders)}</div>
+                        <div style="font-size: 11px; color: #646970;">Safe to Archive</div>
+                    </div>
+                </div>
+                <div style="margin-top: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; font-size: 12px; color: #646970; display: flex; align-items: center; gap: 8px;">
+                    <span class="dashicons dashicons-shield" style="color: #d63638;"></span>
+                    <span><strong>${formatNumber(data.protected_orders)}</strong> orders are protected from archiving (active subscriptions)</span>
+                </div>
+            `;
+            
+            container.classList.remove('woam-loading');
+            container.innerHTML = html;
+            
+        } catch (err) {
+            container.innerHTML = `<p class="woam-error">Failed to load subscription data</p>`;
+            container.classList.remove('woam-loading');
+        }
+    }
+
+    /**
      * Loads archive readiness status
      */
     async function loadReadinessStatus() {
@@ -690,6 +745,7 @@
             loadGrowthForecast(),
             loadRecentActivity(),
             loadStorageChart(),
+            loadSubscriptionStats(),
         ]);
     }
 

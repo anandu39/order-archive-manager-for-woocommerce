@@ -488,7 +488,7 @@ class AnalyticsHandler {
 	 *
 	 * @return array<string, mixed>
 	 */
-	private function get_db_stats_array(): array {
+	public function get_db_stats_array(): array {
 		global $wpdb;
 
 		$table_names = array(
@@ -889,7 +889,7 @@ class AnalyticsHandler {
 	 */
 	private function format_price( float $price ): string {
 		$currency_symbol = function_exists( 'get_woocommerce_currency_symbol' )
-			? get_woocommerce_currency_symbol()
+			? html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' )
 			: '$';
 
 		return $currency_symbol . number_format( $price, 0 );
