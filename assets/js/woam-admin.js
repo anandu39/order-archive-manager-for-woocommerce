@@ -66,57 +66,123 @@
     }
 
     /**
-     * Update header subtext based on store status
-     * This runs independently of tabs - loads immediately on page load
+     * Load opportunity banner with impactful message
      */
-    async function updateHeaderSubtext() {
-        const subtextEl = document.getElementById('woam-header-subtext');
-        if (!subtextEl) return;
+    async function loadOpportunityBanner() {
+        const banner = document.getElementById('woam-opportunity-banner');
+        const messageEl = document.getElementById('woam-opportunity-message');
+        const ctaBtn = document.getElementById('woam-opportunity-cta');
+        
+        if (!banner) return;
         
         try {
-            const data = await woamPost('hw_woam_get_db_stats');
-            const totalBytes = data.total_bytes;
-            const totalFormatted = data.total_formatted;
+            // Get database stats
+            const dbStats = await woamPost('hw_woam_get_db_stats');
+            const totalBytes = dbStats.total_bytes || 0;
+            const totalFormatted = dbStats.total_formatted || '0 B';
             
             // Get order count
             const orderData = await woamPost('hw_woam_get_archive_breakdown');
             const totalArchived = orderData.total_count || 0;
             
-            let icon = '';
-            let message = '';
+            // Get total orders
+            const totalOrdersData = await woamPost('hw_woam_get_count', {
+                mode: 'archive',
+                before_date: '2099-01-01',
+                statuses: ['wc-completed', 'wc-processing', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed']
+            });
+            const totalOrders = totalOrdersData.count || 0;
             
-            if (totalArchived === 0 && totalBytes > 100 * 1024 * 1024) { // >100MB
-                icon = '<span class="dashicons dashicons-warning"></span>';
-                message = `Your database is using ${totalFormatted} of order data. Archive old orders to improve performance.`;
-            } else if (totalArchived === 0) {
-                icon = '<span class="dashicons dashicons-archive"></span>';
-                message = 'Ready to archive? Move completed orders to archive tables and keep WooCommerce fast.';
-            } else if (totalArchived > 0 && totalBytes > 500 * 1024 * 1024) { // >500MB
-                icon = '<span class="dashicons dashicons-yes-alt"></span>';
-                message = `You've archived ${formatNumber(totalArchived)} orders, saving valuable database space. Keep going!`;
-            } else {
-                icon = '<span class="dashicons dashicons-dashboard"></span>';
-                message = 'Keep WooCommerce fast as your store grows — archive orders safely without losing data.';
+            // Calculate eligible orders (completed/cancelled/refunded/failed older than 12 months)
+            let eligibleOrders = 0;
+            if (totalOrders > 0) {
+                const twelveMonthsAgo = new Date();
+                twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+                const dateStr = twelveMonthsAgo.toISOString().split('T')[0];
+                
+                const eligibleData = await woamPost('hw_woam_get_count', {
+                    mode: 'archive',
+                    before_date: dateStr,
+                    statuses: ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
+                });
+                eligibleOrders = eligibleData.count || 0;
             }
             
-            subtextEl.innerHTML = `${icon} ${message}`;
+            // Calculate estimated savings (eligible orders * average size)
+            const avgOrderSize = totalBytes > 0 && totalOrders > 0 ? totalBytes / totalOrders : 50 * 1024;
+            const estimatedSavings = eligibleOrders * avgOrderSize;
+            const estimatedSavingsFormatted = formatBytes(estimatedSavings);
+            
+            // Build message
+            let message = '';
+            let showCta = false;
+            
+            if (totalArchived === 0 && totalBytes > 100 * 1024 * 1024) {
+                message = `
+                    <strong>Your WooCommerce store contains ${totalFormatted} of historical order data.</strong><br>
+                    Large order tables increase backup sizes, slow order searches, and add unnecessary load on reporting and administration tasks.<br>
+                    Based on current data, approximately <strong>${formatNumber(eligibleOrders)}</strong> orders may be eligible for archiving.<br>
+                    <span style="color: #7f54b3; font-weight: 600;">Potential storage reduction: ${estimatedSavingsFormatted}</span>
+                `;
+                showCta = true;
+            } else if (totalArchived === 0) {
+                message = `
+                    <strong>Ready to optimize your WooCommerce database?</strong><br>
+                    Archiving old orders can significantly improve admin performance and reduce backup sizes.
+                    ${eligibleOrders > 0 ? `You have <strong>${formatNumber(eligibleOrders)}</strong> orders that may be eligible for archiving.` : ''}
+                `;
+                showCta = true;
+            } else if (totalArchived > 0 && totalBytes > 500 * 1024 * 1024) {
+                message = `
+                    <strong>Great progress! You've archived ${formatNumber(totalArchived)} orders.</strong><br>
+                    Your database still contains ${totalFormatted} of order data.
+                    ${eligibleOrders > 0 ? `Another <strong>${formatNumber(eligibleOrders)}</strong> orders are eligible for archiving.` : ''}
+                    <span style="color: #2ea64a; font-weight: 600;">Continue optimizing to reclaim more space.</span>
+                `;
+                showCta = true;
+            } else {
+                message = `
+                    <strong>Your WooCommerce database is well-maintained!</strong><br>
+                    Keep monitoring your database health to ensure optimal performance.
+                    ${totalArchived > 0 ? `You've already archived ${formatNumber(totalArchived)} orders.` : ''}
+                `;
+                showCta = false;
+            }
+            
+            messageEl.innerHTML = message;
+            
+            if (showCta && eligibleOrders > 0) {
+                ctaBtn.style.display = 'inline-flex';
+                ctaBtn.addEventListener('click', () => {
+                    document.querySelector('.woam-tab[data-tab="archive"]')?.click();
+                });
+            } else {
+                ctaBtn.style.display = 'none';
+            }
+            
+            banner.style.display = 'block';
             
         } catch (err) {
-            console.error('Failed to update header subtext:', err);
-            subtextEl.innerHTML = '<span class="dashicons dashicons-info"></span> Reduce database bloat, improve admin performance, and restore archived orders anytime with one click.';
+            console.error('Failed to load opportunity banner:', err);
+            messageEl.innerHTML = 'Reduce database bloat, improve admin performance, and restore archived orders anytime with one click.';
+            banner.style.display = 'block';
         }
     }
 
     /**
-     * Update header subtext on Overview tab load (refresh data when coming back)
-     * This ensures data stays current if user switches away and back
+     * Format bytes helper
      */
-    async function refreshHeaderSubtext() {
-        // Only refresh if we're on overview tab
-        const overviewPanel = document.getElementById('woam-panel-overview');
-        if (overviewPanel && overviewPanel.classList.contains('woam-panel--active')) {
-            await updateHeaderSubtext();
+    function formatBytes(bytes) {
+        if (bytes >= 1073741824) {
+            return (bytes / 1073741824).toFixed(1) + ' GB';
         }
+        if (bytes >= 1048576) {
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+        if (bytes >= 1024) {
+            return (bytes / 1024).toFixed(1) + ' KB';
+        }
+        return bytes + ' B';
     }
 
     /**
@@ -737,7 +803,7 @@
      */
     async function loadOverviewTab() {
         await Promise.allSettled([
-            refreshHeaderSubtext(),
+            loadOpportunityBanner(),
             loadHealthScore(),
             loadRecommendations(),
             loadLifetimeStats(),
@@ -953,6 +1019,225 @@
                 console.error('Failed to apply recommendation:', e);
             }
         }
+    }
+
+    /**
+     * Load order breakdown by period
+     */
+    async function loadOrderBreakdownByPeriod() {
+        const container = document.getElementById('woam-order-breakdown');
+        const totalContainer = document.getElementById('woam-order-total');
+        const analysisContainer = document.getElementById('woam-order-analysis');
+        
+        const beforeDate = document.getElementById('woam-before-date').value;
+        if (!beforeDate) {
+            analysisContainer.style.display = 'none';
+            return;
+        }
+        
+        analysisContainer.style.display = 'block';
+        container.innerHTML = '<span class="woam-loading">Loading...</span>';
+        
+        try {
+            const period = calculatePeriodFromDate(beforeDate);
+            const data = await woamPost('hw_woam_get_order_breakdown_by_period', { period: period });
+            
+            let html = '';
+            const statusColors = {
+                'completed': { bg: '#e6f4ea', border: '#2ea64a' },
+                'processing': { bg: '#e6f0fa', border: '#2271b1' },
+                'on-hold': { bg: '#fef9e7', border: '#dba617' },
+                'cancelled': { bg: '#fdf0f0', border: '#d63638' },
+                'refunded': { bg: '#fef9e7', border: '#dba617' },
+                'failed': { bg: '#fdf0f0', border: '#d63638' },
+                'pending': { bg: '#f8f4ff', border: '#7f54b3' },
+            };
+            
+            for (const [status, count] of Object.entries(data.breakdown)) {
+                const color = statusColors[status] || { bg: '#f0f0f1', border: '#646970' };
+                html += `
+                    <div style="background: ${color.bg}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${color.border};">
+                        <strong>${formatNumber(count)}</strong>
+                        <span style="color: #646970;">${status.replace('wc-', '').replace('-', ' ')}</span>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+            totalContainer.innerHTML = `<strong>Total eligible orders: ${formatNumber(data.total)}</strong>`;
+            
+        } catch (err) {
+            container.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
+        }
+    }
+
+    /**
+     * Calculate period from date
+     */
+    function calculatePeriodFromDate(date) {
+        const selected = new Date(date);
+        const now = new Date();
+        const diffMonths = (now.getFullYear() - selected.getFullYear()) * 12 + (now.getMonth() - selected.getMonth());
+        
+        if (diffMonths <= 3) return '3 months';
+        if (diffMonths <= 6) return '6 months';
+        if (diffMonths <= 12) return '12 months';
+        if (diffMonths <= 24) return '24 months';
+        return '36 months';
+    }
+
+    /**
+     * Load subscription stats for archive tab
+     */
+    async function loadSubscriptionStatsMini() {
+        if (!document.getElementById('woam-subscription-stats-mini')) return;
+        
+        try {
+            const data = await woamPost('hw_woam_get_subscription_analysis');
+            
+            document.getElementById('woam-subs-protected').textContent = formatNumber(data.protected || 0);
+            document.getElementById('woam-subs-cancelled').textContent = formatNumber(data.cancelled || 0);
+            document.getElementById('woam-subs-expired').textContent = formatNumber(data.expired || 0);
+            document.getElementById('woam-subs-eligible').textContent = formatNumber(data.eligible || 0);
+            
+        } catch (err) {
+            console.error('Failed to load subscription stats:', err);
+        }
+    }
+
+    /**
+     * Enhanced batch loop with progress
+     */
+    async function runBatchLoopEnhanced(opts) {
+        const { action, payload, total, progressEl, fillEl, textEl, summaryEl, startBtn, confirmEl } = opts;
+
+        let processed = 0;
+        let succeeded = 0;
+        let failed = 0;
+        let batchCount = 0;
+        const startTime = Date.now();
+
+        startBtn.disabled = true;
+        progressEl.style.display = 'block';
+        summaryEl.innerHTML = '';
+        
+        if (confirmEl) {
+            confirmEl.style.display = 'none';
+        }
+
+        const batchSize = parseInt(document.getElementById('woam-batch-size')?.value || '500');
+        payload.batch_size = batchSize;
+
+        try {
+            while (true) {
+                batchCount++;
+                const data = await woamPost(action, payload);
+
+                processed += data.processed;
+                succeeded += data.succeeded;
+                failed += data.failed;
+
+                const pct = total > 0 ? Math.min(Math.round((processed / total) * 100), 100) : 100;
+                fillEl.style.width = pct + '%';
+                
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+                
+                let etaStr = '--';
+                if (processed > 0 && processed < total) {
+                    const avgTimePerOrder = elapsed / processed;
+                    const remaining = total - processed;
+                    const etaSeconds = Math.round(avgTimePerOrder * remaining);
+                    const etaMinutes = Math.floor(etaSeconds / 60);
+                    const etaSecondsRemain = etaSeconds % 60;
+                    etaStr = etaMinutes > 0 ? `${etaMinutes}m ${etaSecondsRemain}s` : `${etaSecondsRemain}s`;
+                }
+                
+                const totalBatches = Math.ceil(total / batchSize);
+                
+                textEl.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div><strong>Batch ${batchCount} of ${totalBatches}</strong></div>
+                        <div>${formatNumber(processed)} / ${formatNumber(total)} orders processed</div>
+                        <div style="font-size: 11px; color: #646970;">
+                            ${pct}% complete · Elapsed: ${timeStr} · ETA: ${etaStr}
+                        </div>
+                    </div>
+                `;
+
+                if (data.processed === 0) {
+                    break;
+                }
+            }
+
+            const elapsedFinal = Math.round((Date.now() - startTime) / 1000);
+            const minutesFinal = Math.floor(elapsedFinal / 60);
+            const secondsFinal = elapsedFinal % 60;
+            const finalTime = minutesFinal > 0 ? `${minutesFinal}m ${secondsFinal}s` : `${secondsFinal}s`;
+
+            const dryNote = payload.dry_run ? ' <em>(dry run — no changes made)</em>' : '';
+            summaryEl.innerHTML = `
+                <div class="woam-summary woam-summary--${failed > 0 ? 'warn' : 'ok'}">
+                    <div>
+                        <p><strong>${formatNumber(succeeded)}</strong> succeeded &nbsp;
+                        <strong>${formatNumber(failed)}</strong> failed${dryNote}</p>
+                        <p style="font-size: 12px; color: #646970; margin-top: 4px;">
+                            Completed in ${finalTime} · ${formatNumber(processed)} orders processed
+                        </p>
+                    </div>
+                </div>`;
+
+            state.dirty = true;
+
+        } catch (err) {
+            summaryEl.innerHTML = `<div class="woam-summary woam-summary--error">
+                <p>${escHtml(err.message)}</p>
+            </div>`;
+        } finally {
+            startBtn.disabled = false;
+        }
+    }
+
+    /**
+     * Update start archive handler to use enhanced batch loop
+     */
+    function initArchiveTabEnhanced() {
+        // ... existing initArchiveTab code ...
+        
+        // Replace the start button handler with enhanced version
+        document.getElementById('woam-archive-start').addEventListener('click', async () => {
+            const dryRun = document.getElementById('woam-archive-dry-run').checked;
+            const confirmVal = document.getElementById('woam-archive-confirm').value.trim();
+            const confirmEl = document.getElementById('woam-archive-confirm-group');
+
+            if (!dryRun && confirmVal !== 'ARCHIVE') {
+                alert('Please type ARCHIVE to confirm.');
+                return;
+            }
+
+            const beforeDate = document.getElementById('woam-before-date').value;
+            const statuses = Array.from(
+                document.querySelectorAll('#woam-archive-statuses input:checked')
+            ).map(cb => cb.value);
+
+            await runBatchLoopEnhanced({
+                action: 'hw_woam_archive_batch',
+                payload: { 
+                    before_date: beforeDate, 
+                    statuses, 
+                    dry_run: dryRun ? '1' : ''
+                },
+                total: state.totalOrders,
+                progressEl: document.getElementById('woam-archive-progress'),
+                fillEl: document.getElementById('woam-archive-progress-fill'),
+                textEl: document.getElementById('woam-archive-progress-text'),
+                summaryEl: document.getElementById('woam-archive-summary'),
+                startBtn: document.getElementById('woam-archive-start'),
+                confirmEl: confirmEl,
+            });
+        });
     }
 
     /**
@@ -1713,7 +1998,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         initTabs();
         initHeroButtons();
-        updateHeaderSubtext();
+        loadOpportunityBanner();
         loadOverviewTab();
         initArchiveTab();
         initArchivedTab();

@@ -116,10 +116,20 @@ class AdminPage {
 		<div class="wrap woam-wrap woam-onboarding-ready">
 			<div class="woam-header">
 				<h1><?php esc_html_e( 'Order Archive Manager', 'woo-order-archive-manager' ); ?></h1>
-				<p id="woam-header-subtext" class="woam-header-subtext">
-					<span class="dashicons dashicons-update spin" style="font-size: 14px; width: 14px; height: 14px; margin-right: 6px;"></span>
-					<?php esc_html_e( 'Loading store insights...', 'woo-order-archive-manager' ); ?>
-				</p>
+				<div id="woam-opportunity-banner" class="woam-opportunity-banner">
+					<div class="woam-opportunity-banner-content">
+						<div class="woam-opportunity-icon">
+							<span class="dashicons dashicons-chart-line"></span>
+						</div>
+						<div class="woam-opportunity-text">
+							<span id="woam-opportunity-message"><?php esc_html_e( 'Loading database insights...', 'woo-order-archive-manager' ); ?></span>
+						</div>
+						<button type="button" class="woam-button woam-button--primary" id="woam-opportunity-cta" style="display: none;">
+							<span class="dashicons dashicons-archive"></span>
+							<?php esc_html_e( 'Review Archive Opportunities', 'woo-order-archive-manager' ); ?>
+						</button>
+					</div>
+				</div>
 			</div>
 
 			<nav class ="woam-tabs" role ="tablist">

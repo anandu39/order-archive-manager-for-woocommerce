@@ -174,9 +174,9 @@ class ArchiveHandler {
 		}
 
 		// Check 1 - Is the order a renewal or resubscribe order?
-		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
+		$query_meta        = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
 		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
-		$renewal_meta = $this->wpdb->get_var( $prepared_meta_sql );
+		$renewal_meta      = $this->wpdb->get_var( $prepared_meta_sql );
 
 		if ( $renewal_meta ) {
 			return array(
@@ -188,14 +188,14 @@ class ArchiveHandler {
 		}
 
 		// Check 2 - Does any subscription have this order as its parent?
-		$query_subs = 'SELECT post_status FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' LIMIT 1';
-		$prepared_subs_sql = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
+		$query_subs          = 'SELECT post_status FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' LIMIT 1';
+		$prepared_subs_sql   = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
 		$subscription_status = $this->wpdb->get_var( $prepared_subs_sql );
 
 		if ( $subscription_status ) {
 			// Statuses safe to archive.
 			$safe_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed', 'wc-trash' );
-			
+
 			if ( in_array( $subscription_status, $safe_statuses, true ) ) {
 				return array(
 					'is_linked'           => false,
@@ -240,16 +240,16 @@ class ArchiveHandler {
 	 */
 	public function get_subscription_orders( string $status_filter = '' ): array {
 		global $wpdb;
-		
+
 		if ( ! class_exists( 'WC_Subscriptions' ) ) {
 			return array();
 		}
-		
+
 		$status_condition = '';
 		if ( ! empty( $status_filter ) ) {
 			$status_condition = $wpdb->prepare( ' AND post_status = %s', $status_filter );
 		}
-		
+
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT p.ID, p.post_status, p.post_date, 
@@ -265,7 +265,7 @@ class ArchiveHandler {
 				$wpdb->posts
 			)
 		);
-		
+
 		$orders = array();
 		foreach ( $results as $row ) {
 			$orders[] = array(
@@ -275,7 +275,7 @@ class ArchiveHandler {
 				'subscription_status' => $row->subscription_status,
 			);
 		}
-		
+
 		return $orders;
 	}
 
@@ -1089,13 +1089,18 @@ class ArchiveHandler {
 	 * Returns a summary array so the Ajax handler can report progress
 	 * to the admin UI without needing to track state on the JS side.
 	 *
-	 * @param string             $before_date Archive orders placed before this date (Y-m-d format).
+	 * @param string             $before_date Archive orders placed before this date.
 	 * @param array<int, string> $statuses    Order statuses to include.
-	 * @param bool               $dry_run     If true, all DB changes are rolled back — nothing is archived.
+	 * @param bool               $dry_run     If true, all DB changes are rolled back.
+	 * @param int                $batch_size  Optional custom batch size.
 	 * @return array{processed: int, succeeded: int, failed: int, dry_run: bool}
 	 */
-	public function process_batch( string $before_date, array $statuses, bool $dry_run = false ): array {
-
+	public function process_batch( string $before_date, array $statuses, bool $dry_run = false, int $batch_size = 0 ): array {
+		// Use custom batch size if provided, otherwise use default
+		if ( $batch_size > 0 ) {
+			$this->batch_size = $batch_size;
+		}
+		
 		$order_ids = $this->get_batch_order_ids( $before_date, $statuses );
 
 		$results = array(

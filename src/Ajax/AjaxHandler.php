@@ -102,6 +102,13 @@ class AjaxHandler {
 		add_action( 'wp_ajax_hw_woam_get_recommendations', array( $this, 'handle_get_recommendations' ) );
 		add_action( 'wp_ajax_hw_woam_get_archive_readiness', array( $this, 'handle_get_archive_readiness' ) );
 		add_action( 'wp_ajax_hw_woam_get_growth_forecast', array( $this, 'handle_get_growth_forecast' ) );
+
+		// Benchmark and Subscription hooks.
+		add_action( 'wp_ajax_hw_woam_get_subscription_analysis', array( $this, 'handle_get_subscription_analysis' ) );
+		add_action( 'wp_ajax_hw_woam_get_archive_preview', array( $this, 'handle_get_archive_preview' ) );
+		add_action( 'wp_ajax_hw_woam_run_benchmark', array( $this, 'handle_run_benchmark' ) );
+		add_action( 'wp_ajax_hw_woam_get_benchmark_comparison', array( $this, 'handle_get_benchmark_comparison' ) );
+		add_action( 'wp_ajax_hw_woam_get_order_breakdown_by_period', array( $this, 'handle_get_order_breakdown_by_period' ) );
 	}
 
 	/**
@@ -143,7 +150,7 @@ class AjaxHandler {
 		$this->verify_request();
 		wp_send_json_success( $this->analytics_handler->get_archive_readiness() );
 	}
-	
+
 	/**
 	 * Handle get growth forecast request.
 	 *
@@ -154,7 +161,7 @@ class AjaxHandler {
 
 		global $wpdb;
 
-		// Get current database size - FIXED: use analytics_handler
+		// Get current database size - FIXED: use analytics_handler.
 		$current_size = $this->analytics_handler->get_db_stats_array()['total_bytes'] ?? 0;
 
 		// Get monthly growth rate from analytics handler.
@@ -883,21 +890,23 @@ class AjaxHandler {
 	 */
 	public function handle_get_subscription_stats(): void {
 		$this->verify_request();
-		
+
 		global $wpdb;
-		
+
 		if ( ! class_exists( 'WC_Subscriptions' ) ) {
-			wp_send_json_success( array(
-				'subscriptions_active' => false,
-				'message'              => 'WooCommerce Subscriptions is not active',
-			) );
+			wp_send_json_success(
+				array(
+					'subscriptions_active' => false,
+					'message'              => 'WooCommerce Subscriptions is not active',
+				)
+			);
 			return;
 		}
-		
-		// Get subscription counts by status
-		$statuses = array( 'wc-active', 'wc-cancelled', 'wc-expired', 'wc-on-hold', 'wc-pending-cancel', 'wc-failed' );
+
+		// Get subscription counts by status.
+		$statuses     = array( 'wc-active', 'wc-cancelled', 'wc-expired', 'wc-on-hold', 'wc-pending-cancel', 'wc-failed' );
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-		
+
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT post_status, COUNT(*) as count 
@@ -908,20 +917,20 @@ class AjaxHandler {
 				array_merge( array( $wpdb->posts ), $statuses )
 			)
 		);
-		
+
 		$stats = array(
-			'total_subscriptions' => 0,
-			'active'              => 0,
-			'cancelled'           => 0,
-			'expired'             => 0,
-			'on_hold'             => 0,
-			'pending_cancel'      => 0,
-			'failed'              => 0,
-			'protected_orders'    => 0,
-			'archivable_orders'   => 0,
+			'total_subscriptions'  => 0,
+			'active'               => 0,
+			'cancelled'            => 0,
+			'expired'              => 0,
+			'on_hold'              => 0,
+			'pending_cancel'       => 0,
+			'failed'               => 0,
+			'protected_orders'     => 0,
+			'archivable_orders'    => 0,
 			'subscriptions_active' => true,
 		);
-		
+
 		foreach ( $results as $row ) {
 			$status = str_replace( 'wc-', '', $row->post_status );
 			if ( isset( $stats[ $status ] ) ) {
@@ -929,11 +938,11 @@ class AjaxHandler {
 			}
 			$stats['total_subscriptions'] += (int) $row->count;
 		}
-		
+
 		// Count protected orders (active subscriptions that shouldn't be archived)
 		$protected_statuses = array( 'wc-active', 'wc-pending-cancel', 'wc-on-hold' );
-		$placeholders = implode( ', ', array_fill( 0, count( $protected_statuses ), '%s' ) );
-		
+		$placeholders       = implode( ', ', array_fill( 0, count( $protected_statuses ), '%s' ) );
+
 		$stats['protected_orders'] = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(DISTINCT post_parent) 
@@ -944,11 +953,11 @@ class AjaxHandler {
 				array_merge( array( $wpdb->posts ), $protected_statuses )
 			)
 		);
-		
+
 		// Count archivable orders (cancelled, expired, failed subscriptions)
 		$archivable_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed' );
-		$placeholders = implode( ', ', array_fill( 0, count( $archivable_statuses ), '%s' ) );
-		
+		$placeholders        = implode( ', ', array_fill( 0, count( $archivable_statuses ), '%s' ) );
+
 		$stats['archivable_orders'] = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(DISTINCT post_parent) 
@@ -959,9 +968,204 @@ class AjaxHandler {
 				array_merge( array( $wpdb->posts ), $archivable_statuses )
 			)
 		);
-		
+
 		wp_send_json_success( $stats );
 	}
+
+	/**
+	 * Handle get subscription analysis request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_subscription_analysis(): void {
+		try {
+			$this->verify_request();
+			
+			$manager = new \HW\WOAM\Subscription\SubscriptionManager( $this->wpdb );
+			$data = $manager->get_subscription_breakdown();
+			
+			wp_send_json_success( $data );
+			
+		} catch ( \Exception $e ) {
+			ErrorHandler::log( 'Subscription analysis failed', array( 'error' => $e->getMessage() ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to load subscription data.', 'woo-order-archive-manager' ) ) );
+		}
+	}
+
+	/**
+	 * Handle get archive preview request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_archive_preview(): void {
+		try {
+			$this->verify_request();
+			
+			$before_date = isset( $_POST['before_date'] ) 
+				? sanitize_text_field( wp_unslash( $_POST['before_date'] ) )
+				: '';
+			
+			if ( empty( $before_date ) ) {
+				wp_send_json_error( array( 'message' => 'No date provided' ) );
+				return;
+			}
+			
+			global $wpdb;
+			
+			// Get regular orders breakdown
+			$statuses = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed', 'wc-processing', 'wc-on-hold', 'wc-pending' );
+			$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+			
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT post_status, COUNT(*) as count 
+					FROM %i 
+					WHERE post_type = 'shop_order' 
+					AND post_date < %s
+					AND post_status IN ({$placeholders})
+					GROUP BY post_status",
+					array_merge( array( $wpdb->posts, $before_date ), $statuses )
+				)
+			);
+			
+			$breakdown = array();
+			$total_eligible = 0;
+			
+			foreach ( $results as $row ) {
+				$breakdown[ $row->post_status ] = (int) $row->count;
+				if ( in_array( $row->post_status, array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' ), true ) ) {
+					$total_eligible += (int) $row->count;
+				}
+			}
+			
+			// Get subscription data
+			$sub_manager = new \HW\WOAM\Subscription\SubscriptionManager( $wpdb );
+			$sub_data = $sub_manager->get_subscription_breakdown();
+			
+			// Calculate estimated savings
+			$avg_order_size = $this->get_average_order_size_bytes();
+			$estimated_savings = $total_eligible * $avg_order_size;
+			
+			wp_send_json_success( array(
+				'order_breakdown' => $breakdown,
+				'total_eligible' => $total_eligible,
+				'subscription_data' => $sub_data,
+				'estimated_savings' => $estimated_savings,
+				'estimated_savings_formatted' => $this->format_bytes( $estimated_savings ),
+			));
+			
+		} catch ( \Exception $e ) {
+			ErrorHandler::log( 'Archive preview failed', array( 'error' => $e->getMessage() ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to generate archive preview.', 'woo-order-archive-manager' ) ) );
+		}
+	}
+
+	/**
+	 * Handle run benchmark request.
+	 *
+	 * @return void
+	 */
+	public function handle_run_benchmark(): void {
+		try {
+			$this->verify_request();
+			
+			$type = isset( $_POST['type'] ) 
+				? sanitize_text_field( wp_unslash( $_POST['type'] ) )
+				: 'before';
+			
+			$manager = new \HW\WOAM\Benchmark\BenchmarkManager( $this->wpdb );
+			$results = $manager->run_benchmarks();
+			$manager->store_benchmarks( $type, $results );
+			
+			wp_send_json_success( array(
+				'type' => $type,
+				'results' => $results,
+				'message' => sprintf(
+					__( 'Benchmark completed successfully. Results stored as %s archive.', 'woo-order-archive-manager' ),
+					$type
+				),
+			));
+			
+		} catch ( \Exception $e ) {
+			ErrorHandler::log( 'Benchmark failed', array( 'error' => $e->getMessage() ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to run benchmark.', 'woo-order-archive-manager' ) ) );
+		}
+	}
+
+	/**
+	 * Handle get benchmark comparison request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_benchmark_comparison(): void {
+		try {
+			$this->verify_request();
+			
+			$manager = new \HW\WOAM\Benchmark\BenchmarkManager( $this->wpdb );
+			$comparison = $manager->get_comparison();
+			
+			wp_send_json_success( $comparison );
+			
+		} catch ( \Exception $e ) {
+			ErrorHandler::log( 'Benchmark comparison failed', array( 'error' => $e->getMessage() ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to load benchmark comparison.', 'woo-order-archive-manager' ) ) );
+		}
+	}
+
+	/**
+	 * Handle get order breakdown by period request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_order_breakdown_by_period(): void {
+		try {
+			$this->verify_request();
+			
+			$period = isset( $_POST['period'] ) 
+				? sanitize_text_field( wp_unslash( $_POST['period'] ) )
+				: '12 months';
+			
+			$cutoff_date = gmdate( 'Y-m-d H:i:s', strtotime( "-{$period}" ) );
+			
+			global $wpdb;
+			
+			$statuses = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed', 'wc-processing', 'wc-on-hold', 'wc-pending' );
+			$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+			
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT post_status, COUNT(*) as count 
+					FROM %i 
+					WHERE post_type = 'shop_order' 
+					AND post_date < %s
+					AND post_status IN ({$placeholders})
+					GROUP BY post_status",
+					array_merge( array( $wpdb->posts, $cutoff_date ), $statuses )
+				)
+			);
+			
+			$breakdown = array();
+			$total = 0;
+			
+			foreach ( $results as $row ) {
+				$status = str_replace( 'wc-', '', $row->post_status );
+				$breakdown[ $status ] = (int) $row->count;
+				$total += (int) $row->count;
+			}
+			
+			wp_send_json_success( array(
+				'breakdown' => $breakdown,
+				'total' => $total,
+				'period' => $period,
+				'cutoff_date' => $cutoff_date,
+			));
+			
+		} catch ( \Exception $e ) {
+			ErrorHandler::log( 'Order breakdown failed', array( 'error' => $e->getMessage() ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to load order breakdown.', 'woo-order-archive-manager' ) ) );
+		}
+	}
+
 	/**
 	 * Checks the archive tables for orphaned rows — meta, items, or notes
 	 * that reference an order ID no longer present in woam_orders.

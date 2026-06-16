@@ -1184,6 +1184,247 @@ Phase 3: Real-Time Savings Estimator Styles
 Archived Tab Redesign - Archive Vault
 --------------------------------------------------------------*/
 
+/*--------------------------------------------------------------
+Beta 7: Enhanced UI Styles
+--------------------------------------------------------------*/
+
+/* Section dividers */
+.woam-section {
+    padding: 20px 0;
+}
+
+.woam-section--general {
+    border-top: 2px solid var(--woam-border);
+}
+
+.woam-section--subscription {
+    border-top: 2px solid var(--woam-border);
+}
+
+/* Order analysis preview */
+.woam-order-analysis {
+    background: var(--woam-bg);
+    border-radius: var(--woam-radius);
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.woam-order-analysis h4 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Enhanced progress display */
+.woam-progress-enhanced {
+    background: var(--woam-card-bg);
+    border: 1px solid var(--woam-border);
+    border-radius: var(--woam-radius);
+    padding: 20px;
+    margin: 16px 0;
+}
+
+.woam-progress-enhanced .woam-progress-bar {
+    height: 12px;
+}
+
+.woam-progress-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.woam-progress-stat {
+    text-align: center;
+}
+
+.woam-progress-stat .value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--woam-purple);
+}
+
+.woam-progress-stat .label {
+    font-size: 11px;
+    color: var(--woam-muted);
+}
+
+/* Subscription stats mini */
+.woam-subs-stats-mini {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.woam-subs-stat {
+    padding: 12px;
+    border-radius: var(--woam-radius);
+    text-align: center;
+}
+
+.woam-subs-stat--protected {
+    background: #fdf0f0;
+    border-left: 3px solid #d63638;
+}
+
+.woam-subs-stat--safe {
+    background: #e6f4ea;
+    border-left: 3px solid #2ea64a;
+}
+
+.woam-subs-stat .number {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.woam-subs-stat .label {
+    font-size: 11px;
+    display: block;
+}
+
+/* Disabled checkbox styling */
+.woam-checkbox--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.woam-checkbox--disabled input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
+/* Benchmark comparison */
+.woam-benchmark-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.woam-benchmark-item {
+    background: var(--woam-bg);
+    border-radius: var(--woam-radius);
+    padding: 16px;
+    text-align: center;
+}
+
+.woam-benchmark-item .metric {
+    font-size: 12px;
+    color: var(--woam-muted);
+    margin-bottom: 8px;
+}
+
+.woam-benchmark-item .values {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    font-size: 14px;
+}
+
+.woam-benchmark-item .before {
+    color: #d63638;
+}
+
+.woam-benchmark-item .after {
+    color: #2ea64a;
+}
+
+.woam-benchmark-item .improvement {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--woam-purple);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .woam-progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .woam-subs-stats-mini {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .woam-progress-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .woam-subs-stats-mini {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Opportunity Banner */
+.woam-opportunity-banner {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e8f0fe 100%);
+    border: 1px solid #c8d9e8;
+    border-radius: var(--woam-radius);
+    padding: 16px 20px;
+    margin: 12px 0 20px;
+    display: none;
+}
+
+.woam-opportunity-banner-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.woam-opportunity-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.woam-opportunity-icon .dashicons {
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+    color: #7f54b3;
+}
+
+.woam-opportunity-text {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #1d2327;
+}
+
+.woam-opportunity-text strong {
+    color: #1d2327;
+}
+
+.woam-opportunity-text span {
+    display: block;
+}
+
+.woam-opportunity-banner .woam-button {
+    flex-shrink: 0;
+    padding: 6px 16px;
+    font-size: 12px;
+    align-self: center;
+}
+
+.woam-opportunity-banner .woam-button .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+
+@media (max-width: 768px) {
+    .woam-opportunity-banner-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .woam-opportunity-banner .woam-button {
+        align-self: stretch;
+        justify-content: center;
+    }
+}
+
 /* Vault Statistics Banner */
 .woam-vault-stats {
     display: grid;
