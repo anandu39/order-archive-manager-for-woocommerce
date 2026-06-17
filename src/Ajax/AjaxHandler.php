@@ -486,18 +486,6 @@ class AjaxHandler {
 	 *
 	 * @return void
 	 */
-	/**
-	 * Returns an estimated space saving for archiving orders matching the given filters.
-	 * Used by the Archive tab Step 2 (Review Impact) before the user starts a batch.
-	 *
-	 * Counts matching order rows and their related records, then multiplies
-	 * by average row size from information_schema to produce a byte estimate.
-	 * This is an approximation — actual savings may vary.
-	 *
-	 * Expects POST: nonce, before_date, statuses[]
-	 *
-	 * @return void
-	 */
 	public function handle_get_savings_estimate(): void {
 
 		$this->verify_request();
@@ -529,149 +517,201 @@ class AjaxHandler {
 		$order_items_table      = $wpdb->prefix . 'woocommerce_order_items';
 		$order_items_meta_table = $wpdb->prefix . 'woocommerce_order_itemmeta';
 
-		// Generate the dynamic placeholder string for the SQL IN clause (e.g., "%s, %s, %s").
+		// Generate the dynamic placeholder string for the SQL IN clause.
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
 		// ---------------------------------------------------------------------
-        // Step 1 — count matching orders.
-        // ---------------------------------------------------------------------
-        // Base condition for Step 1 (No table alias)
-        $date_condition = $from_date ? 'AND post_date >= %s AND post_date < %s' : 'AND post_date < %s';
-        
-        // Aliased condition for Step 2 Joins (Uses p.post_date)
-        $aliased_date_condition = $from_date ? 'AND p.post_date >= %s AND p.post_date < %s' : 'AND p.post_date < %s';
+		// Step 1 — count matching orders.
+		// ---------------------------------------------------------------------
+		
+		// Build date condition and arguments
+		if ( ! empty( $from_date ) ) {
+			$from_datetime = $from_date . ' 00:00:00';
+			$to_datetime = $before_date . ' 23:59:59';
+			
+			$query_orders = "SELECT COUNT(*) FROM %i 
+							WHERE post_type = 'shop_order' 
+							AND post_date >= %s 
+							AND post_date <= %s
+							AND post_status IN ({$in_placeholders})";
+			
+			$order_count = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					$query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					array_merge( array( $wpdb->posts, $from_datetime, $to_datetime ), $statuses )
+				)
+			);
+		} else {
+			$query_orders = "SELECT COUNT(*) FROM %i 
+							WHERE post_type = 'shop_order' 
+							AND post_date < %s 
+							AND post_status IN ({$in_placeholders})";
+			
+			$order_count = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					$query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					array_merge( array( $wpdb->posts, $before_date ), $statuses )
+				)
+			);
+		}
 
-        $query_orders = "SELECT COUNT(*) FROM %i 
-                        WHERE post_type = 'shop_order' 
-                        {$date_condition}
-                        AND post_status IN ({$in_placeholders})";
+		if ( 0 === $order_count ) {
+			wp_send_json_success(
+				array(
+					'order_count'     => 0,
+					'row_counts'      => array(),
+					'estimated_bytes' => 0,
+					'estimated_size'  => '0 B',
+				)
+			);
+			return;
+		}
 
-        $date_args    = $from_date ? array( $from_date . ' 00:00:00', $before_date . ' 23:59:59' ) : array( $before_date );
-        $order_count  = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                $query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-                array_merge( array( $wpdb->posts ), $date_args, $statuses )
-            )
-        );
+		// ---------------------------------------------------------------------
+		// Step 2 — count related rows across all tables.
+		// ---------------------------------------------------------------------
 
-        if ( 0 === $order_count ) {
-            wp_send_json_success(
-                array(
-                    'order_count'     => 0,
-                    'row_counts'      => array(),
-                    'estimated_bytes' => 0,
-                    'estimated_size'  => '0 B',
-                )
-            );
-            return;
-        }
+		// Build date condition for JOIN queries
+		if ( ! empty( $from_date ) ) {
+			$from_datetime = $from_date . ' 00:00:00';
+			$to_datetime = $before_date . ' 23:59:59';
+			$date_condition = 'AND p.post_date >= %s AND p.post_date <= %s';
+			$date_args = array( $from_datetime, $to_datetime );
+		} else {
+			$date_condition = 'AND p.post_date < %s';
+			$date_args = array( $before_date );
+		}
 
-        // ---------------------------------------------------------------------
-        // Step 2 — count related rows across all six tables.
-        // ---------------------------------------------------------------------
+		// Count Meta Rows.
+		$query_meta = "SELECT COUNT(*) FROM %i pm
+					INNER JOIN %i p ON pm.post_id = p.ID
+					WHERE p.post_type = 'shop_order'
+					{$date_condition}
+					AND p.post_status IN ({$in_placeholders})";
 
-        // Fix for Meta Rows.
-        $query_meta = "SELECT COUNT(*) FROM %i pm
-                      INNER JOIN %i p ON pm.post_id = p.ID
-                      WHERE p.post_type = 'shop_order'
-                      {$aliased_date_condition}
-                      AND p.post_status IN ({$in_placeholders})";
+		$meta_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				$query_meta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $wpdb->postmeta, $wpdb->posts ), $date_args, $statuses )
+			)
+		);
 
-        $meta_count = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                $query_meta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-                array_merge( array( $wpdb->postmeta, $wpdb->posts ), $date_args, $statuses )
-            )
-        );
+		// Count Order Items Rows.
+		$query_items = "SELECT COUNT(*) FROM %i oi
+					INNER JOIN %i p ON oi.order_id = p.ID
+					WHERE p.post_type = 'shop_order'
+					{$date_condition}
+					AND p.post_status IN ({$in_placeholders})";
 
-        // Fix for Order Items Rows.
-        $query_items = "SELECT COUNT(*) FROM %i oi
-                       INNER JOIN %i p ON oi.order_id = p.ID
-                       WHERE p.post_type = 'shop_order'
-                       {$aliased_date_condition}
-                       AND p.post_status IN ({$in_placeholders})";
+		$items_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				$query_items, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $order_items_table, $wpdb->posts ), $date_args, $statuses )
+			)
+		);
 
-        $items_count = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                $query_items, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-                array_merge( array( $order_items_table, $wpdb->posts ), $date_args, $statuses )
-            )
-        );
+		// Count Order Item Meta Rows.
+		$query_itemmeta = "SELECT COUNT(*) FROM %i oim
+						INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+						INNER JOIN %i p ON oi.order_id = p.ID
+						WHERE p.post_type = 'shop_order'
+						{$date_condition}
+						AND p.post_status IN ({$in_placeholders})";
 
-        // Fix for Order Item Meta Rows.
-        $query_itemmeta = "SELECT COUNT(*) FROM %i oim
-                          INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
-                          INNER JOIN %i p ON oi.order_id = p.ID
-                          WHERE p.post_type = 'shop_order'
-                          {$aliased_date_condition}
-                          AND p.post_status IN ({$in_placeholders})";
+		$itemmeta_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				$query_itemmeta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $order_items_meta_table, $order_items_table, $wpdb->posts ), $date_args, $statuses )
+			)
+		);
 
-        $itemmeta_count = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                $query_itemmeta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-                array_merge( array( $order_items_meta_table, $order_items_table, $wpdb->posts ), $date_args, $statuses )
-            )
-        );
+		// Count Order Notes/Comments Rows.
+		$query_notes = "SELECT COUNT(*) FROM %i
+					WHERE comment_post_ID IN (
+						SELECT ID FROM %i p
+						WHERE p.post_type = 'shop_order'
+						{$date_condition}
+						AND p.post_status IN ({$in_placeholders})
+					)
+					AND comment_type IN ('order_note', 'order_note_private')";
 
-        // Fix for Order Notes/Comments Rows.
-        $query_notes = "SELECT COUNT(*) FROM %i
-                       WHERE comment_post_ID IN (
-                           SELECT ID FROM %i p
-                           WHERE p.post_type = 'shop_order'
-                           {$aliased_date_condition}
-                           AND p.post_status IN ({$in_placeholders})
-                       )
-                       AND comment_type IN ('order_note', 'order_note_private')";
+		$notes_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				$query_notes, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $wpdb->comments, $wpdb->posts ), $date_args, $statuses )
+			)
+		);
 
-        $notes_count = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                $query_notes, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-                array_merge( array( $wpdb->comments, $wpdb->posts ), $date_args, $statuses )
-            )
-        );
+		// Count Refund Rows.
+		$query_refunds = "SELECT COUNT(*) FROM %i p
+						WHERE p.post_type = 'shop_order_refund'
+						AND p.post_parent IN (
+							SELECT ID FROM %i
+							WHERE post_type = 'shop_order'
+							{$date_condition}
+							AND post_status IN ({$in_placeholders})
+						)";
+
+		$refunds_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				$query_refunds, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				array_merge( array( $wpdb->posts, $wpdb->posts ), $date_args, $statuses )
+			)
+		);
 
 		$row_counts = array(
-			'orders'      => $order_count,
-			'order_meta'  => $meta_count,
-			'order_items' => $items_count,
-			'item_meta'   => $itemmeta_count,
-			'order_notes' => $notes_count,
+			'orders'        => $order_count,
+			'order_meta'    => $meta_count,
+			'order_items'   => $items_count,
+			'item_meta'     => $itemmeta_count,
+			'order_notes'   => $notes_count,
+			'refunds'       => $refunds_count,
 		);
 
 		// ---------------------------------------------------------------------
 		// Step 3 — get average row sizes from information_schema.
 		// ---------------------------------------------------------------------
 		$table_list = array(
-			'orders'      => $wpdb->posts,
-			'order_meta'  => $wpdb->postmeta,
-			'order_items' => $order_items_table,
-			'item_meta'   => $order_items_meta_table,
-			'order_notes' => $wpdb->comments,
+			'orders'        => $wpdb->posts,
+			'order_meta'    => $wpdb->postmeta,
+			'order_items'   => $order_items_table,
+			'item_meta'     => $order_items_meta_table,
+			'order_notes'   => $wpdb->comments,
+			'refunds'       => $wpdb->posts, // Refunds are in wp_posts too
 		);
 
 		$avg_row_sizes = array();
 
 		foreach ( $table_list as $key => $table ) {
-			$avg                   = (float) $wpdb->get_var(
+			$avg = (float) $wpdb->get_var(
 				$wpdb->prepare(
 					'SELECT ROUND( ( DATA_LENGTH + INDEX_LENGTH ) / TABLE_ROWS, 2 )
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME = %s
-                    AND TABLE_ROWS > 0',
+					FROM information_schema.TABLES
+					WHERE TABLE_SCHEMA = DATABASE()
+					AND TABLE_NAME = %s
+					AND TABLE_ROWS > 0',
 					$table
 				)
 			);
-			$avg_row_sizes[ $key ] = $avg;
+			$avg_row_sizes[ $key ] = $avg > 0 ? $avg : 100; // Fallback to 100 bytes
 		}
 
 		// ---------------------------------------------------------------------
 		// Step 4 — estimate total bytes freed.
 		// ---------------------------------------------------------------------
 		$estimated_bytes = 0;
+		$avg_size_map = array(
+			'orders'        => 2000,   // ~2KB per order post
+			'order_meta'    => 100,    // ~100 bytes per meta
+			'order_items'   => 200,    // ~200 bytes per item
+			'item_meta'     => 100,    // ~100 bytes per item meta
+			'order_notes'   => 150,    // ~150 bytes per note
+			'refunds'       => 1500,   // ~1.5KB per refund
+		);
 
 		foreach ( $row_counts as $key => $count ) {
-			$estimated_bytes += $count * ( $avg_row_sizes[ $key ] ?? 0 );
+			$avg_size = $avg_row_sizes[ $key ] ?? $avg_size_map[ $key ] ?? 100;
+			$estimated_bytes += $count * $avg_size;
 		}
 
 		$estimated_bytes = (int) $estimated_bytes;
@@ -704,7 +744,8 @@ class AjaxHandler {
 		);
 		
 		if ($oldest_date) {
-			$date = new DateTime($oldest_date);
+			// Fix: Use DateTime with proper namespace
+			$date = new \DateTime($oldest_date);
 			wp_send_json_success(array(
 				'oldest_date' => $date->format('Y-m-d'),
 				'oldest_date_formatted' => date_i18n(get_option('date_format'), strtotime($oldest_date)),
@@ -1483,17 +1524,19 @@ class AjaxHandler {
 	 * @return int Estimated bytes per order.
 	 */
 	private function get_average_order_size_bytes(): int {
+		global $wpdb;
+		
 		$tables = array(
-			$this->wpdb->posts,
-			$this->wpdb->postmeta,
-			$this->wpdb->prefix . 'woocommerce_order_items',
-			$this->wpdb->prefix . 'woocommerce_order_itemmeta',
+			$wpdb->posts,
+			$wpdb->postmeta,
+			$wpdb->prefix . 'woocommerce_order_items',
+			$wpdb->prefix . 'woocommerce_order_itemmeta',
 		);
 
 		$placeholders = implode( ', ', array_fill( 0, count( $tables ), '%s' ) );
 
-		$avg = (float) $this->wpdb->get_var(
-			$this->wpdb->prepare(
+		$avg = (float) $wpdb->get_var(
+			$wpdb->prepare(
 				"SELECT ROUND( SUM( DATA_LENGTH + INDEX_LENGTH ) / SUM( TABLE_ROWS ), 2 )
 				FROM information_schema.TABLES
 				WHERE TABLE_SCHEMA = DATABASE()

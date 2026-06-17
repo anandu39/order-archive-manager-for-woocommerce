@@ -940,6 +940,83 @@ Tabs Navigation Styles
 	font-size: 13px;
 }
 
+/* Enhanced Datepicker Styles */
+.woam-datepicker {
+    width: 100% !important;
+    padding: 8px 12px 8px 36px !important;
+    min-width: 180px;
+    cursor: pointer;
+    background: #ffffff;
+}
+
+.woam-datepicker:focus {
+    border-color: var(--woam-purple);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(127, 84, 179, 0.15);
+}
+
+/* WordPress jQuery UI Datepicker overrides */
+.ui-datepicker {
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    padding: 12px !important;
+    z-index: 999999 !important;
+}
+
+.ui-datepicker-header {
+    background: #f8f9fa !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+    border-radius: 6px 6px 0 0 !important;
+    padding: 8px 0 !important;
+}
+
+.ui-datepicker-title {
+    color: #1d2327 !important;
+    font-weight: 600 !important;
+}
+
+.ui-datepicker-prev,
+.ui-datepicker-next {
+    cursor: pointer !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+.ui-datepicker-prev:hover,
+.ui-datepicker-next:hover {
+    color: var(--woam-purple) !important;
+}
+
+.ui-datepicker-calendar td {
+    padding: 2px !important;
+}
+
+.ui-datepicker-calendar td a {
+    border-radius: 4px !important;
+    padding: 6px 8px !important;
+    text-align: center !important;
+    color: #1d2327 !important;
+    transition: all 0.15s !important;
+}
+
+.ui-datepicker-calendar td a:hover {
+    background: var(--woam-purple) !important;
+    color: #ffffff !important;
+}
+
+.ui-datepicker-calendar .ui-state-active {
+    background: var(--woam-purple) !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+.ui-datepicker-calendar .ui-state-highlight {
+    background: #f0ebf9 !important;
+    border: 1px solid var(--woam-purple) !important;
+}
+
 /* Buttons */
 .woam-button {
 	display: inline-flex;

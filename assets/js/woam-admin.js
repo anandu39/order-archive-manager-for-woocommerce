@@ -802,15 +802,43 @@
         
         if (!fromInput || !toInput) return;
         
-        // Get oldest order date for min limit
-        fetchOldestOrderDate().then(oldestDate => {
-            if (oldestDate) {
-                fromInput.min = oldestDate;
-                if (toInput.value && toInput.value < oldestDate) {
-                    toInput.value = oldestDate;
+        // Use WordPress's built-in datepicker
+        if (typeof jQuery !== 'undefined' && jQuery.datepicker) {
+            // Get oldest order date for min limit
+            fetchOldestOrderDate().then(oldestDate => {
+                const dateFormat = 'yy-mm-dd';
+                
+                jQuery(fromInput).datepicker({
+                    dateFormat: dateFormat,
+                    changeMonth: true,
+                    changeYear: true,
+                    yearRange: '2000:' + new Date().getFullYear(),
+                    maxDate: 0,
+                    onSelect: function(selectedDate) {
+                        const minDate = jQuery.datepicker.parseDate(dateFormat, selectedDate);
+                        jQuery(toInput).datepicker('option', 'minDate', minDate);
+                        // Trigger change event
+                        fromInput.dispatchEvent(new Event('change'));
+                    }
+                });
+                
+                jQuery(toInput).datepicker({
+                    dateFormat: dateFormat,
+                    changeMonth: true,
+                    changeYear: true,
+                    yearRange: '2000:' + new Date().getFullYear(),
+                    maxDate: 0,
+                    onSelect: function() {
+                        toInput.dispatchEvent(new Event('change'));
+                    }
+                });
+                
+                if (oldestDate) {
+                    const oldest = jQuery.datepicker.parseDate('yy-mm-dd', oldestDate);
+                    jQuery(fromInput).datepicker('option', 'minDate', oldest);
                 }
-            }
-        });
+            });
+        }
         
         // Set max date to today
         const today = new Date().toISOString().split('T')[0];
@@ -880,7 +908,7 @@
                 });
                 
                 if (preset === 'custom') {
-                    fromInput.closest('.woam-date-range').style.display = 'flex';
+                    if (dateRange) dateRange.style.display = 'flex';
                     fromInput.disabled = false;
                     toInput.disabled = false;
                     fromInput.focus();
@@ -910,6 +938,12 @@
                 
                 fromInput.disabled = false;
                 toInput.disabled = false;
+                
+                // Update datepicker values if available
+                if (typeof jQuery !== 'undefined' && jQuery.datepicker) {
+                    jQuery(fromInput).datepicker('setDate', fromStr);
+                    jQuery(toInput).datepicker('setDate', todayStr);
+                }
                 
                 this.classList.add('woam-preset-btn--active');
 
@@ -951,9 +985,18 @@
         const totalContainer = document.getElementById('woam-general-total');
         const orderCountEl = document.getElementById('woam-general-order-count');
         
-        const statuses = Array.from(
+        // Get selected statuses - if none selected, use all available statuses for display
+        let selectedStatuses = Array.from(
             document.querySelectorAll('#woam-archive-statuses input:checked')
         ).map(cb => cb.value);
+        
+        // If no statuses selected, get ALL statuses for analysis display
+        const allStatuses = Array.from(
+            document.querySelectorAll('#woam-archive-statuses input')
+        ).map(cb => cb.value);
+        
+        // Use all statuses if none selected, otherwise use selected ones
+        const statuses = selectedStatuses.length === 0 ? allStatuses : selectedStatuses;
         
         if (statuses.length === 0) {
             container.style.display = 'none';
@@ -984,38 +1027,56 @@
             let totalEligible = 0;
             const eligibleStatuses = ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'];
             
-            for (const [status, count] of Object.entries(data.breakdown || {})) {
-                if (count > 0) {
-                    const color = statusColors[status] || { bg: '#f0f0f1', border: '#646970', label: status.replace('wc-', '') };
-                    const isEligible = eligibleStatuses.includes(status);
-                    html += `
-                        <div style="background: ${color.bg}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${color.border}; display: inline-flex; align-items: center; gap: 6px;">
-                            <strong>${formatNumber(count)}</strong>
-                            <span style="color: #646970;">${color.label}</span>
-                            ${isEligible ? '<span style="color: #2ea64a; font-size: 10px;">✓</span>' : ''}
-                        </div>
-                    `;
-                    if (isEligible) {
-                        totalEligible += count;
-                    }
-                }
-            }
-            
+            // Show total count first
             if (orderCountEl) {
                 orderCountEl.textContent = `${formatNumber(data.total || 0)} orders`;
             }
             
-            breakdownContainer.innerHTML = html || '<p style="color: #646970; font-size: 12px;">No orders found for selected statuses</p>';
+            // Build breakdown pills
+            if (data.breakdown && Object.keys(data.breakdown).length > 0) {
+                for (const [status, count] of Object.entries(data.breakdown)) {
+                    if (count > 0) {
+                        const color = statusColors[status] || { bg: '#f0f0f1', border: '#646970', label: status.replace('wc-', '') };
+                        const isEligible = eligibleStatuses.includes(status);
+                        const isSelected = selectedStatuses.includes(status);
+                        
+                        html += `
+                            <div style="background: ${color.bg}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${color.border}; display: inline-flex; align-items: center; gap: 6px;">
+                                <strong>${formatNumber(count)}</strong>
+                                <span style="color: #646970;">${color.label}</span>
+                                ${isEligible ? '<span style="color: #2ea64a; font-size: 10px;">✓ Eligible</span>' : '<span style="color: #dba617; font-size: 10px;">⨯ Not eligible</span>'}
+                                ${isSelected ? '<span style="color: #7f54b3; font-size: 10px;">(selected)</span>' : ''}
+                            </div>
+                        `;
+                        if (isEligible) {
+                            totalEligible += count;
+                        }
+                    }
+                }
+            } else {
+                html = '<p style="color: #646970; font-size: 12px;">No orders found for the selected period</p>';
+            }
             
-            if (data.estimated_savings_formatted) {
+            breakdownContainer.innerHTML = html;
+            
+            // Show total eligible with savings estimate
+            if (data.estimated_savings_formatted && data.estimated_savings_formatted !== '0 B') {
                 totalContainer.innerHTML = `
-                    <strong>Total eligible: ${formatNumber(totalEligible)}</strong>
+                    <strong>Total eligible for archiving: ${formatNumber(totalEligible)}</strong>
                     <span style="color: #7f54b3; margin-left: 16px;">
                         Estimated savings: ${data.estimated_savings_formatted}
                     </span>
+                    <span style="color: #646970; margin-left: 12px; font-size: 11px;">
+                        (based on ${formatNumber(data.total || 0)} total orders in range)
+                    </span>
                 `;
             } else {
-                totalContainer.innerHTML = `<strong>Total eligible: ${formatNumber(totalEligible)}</strong>`;
+                totalContainer.innerHTML = `
+                    <strong>Total eligible for archiving: ${formatNumber(totalEligible)}</strong>
+                    <span style="color: #646970; margin-left: 12px; font-size: 11px;">
+                        (${formatNumber(data.total || 0)} total orders in range)
+                    </span>
+                `;
             }
             
         } catch (err) {
@@ -1032,6 +1093,7 @@
         const totalContainer = document.getElementById('woam-subscription-total');
         const orderCountEl = document.getElementById('woam-subscription-order-count');
         
+        // Show container even if loading
         container.style.display = 'block';
         breakdownContainer.innerHTML = '<span class="woam-loading">Loading...</span>';
         
@@ -1056,44 +1118,116 @@
             };
             
             const protectedStatuses = ['active', 'on-hold', 'pending-cancel'];
+            const eligibleStatuses = ['cancelled', 'expired', 'failed'];
             
+            // Update the subscription stats mini cards
+            let protectedCount = 0;
+            let cancelledCount = 0;
+            let expiredCount = 0;
+            let eligibleCount = 0;
+            
+            // Update breakdown and stats
             let html = '';
             let totalEligible = 0;
             let totalProtected = 0;
             
-            for (const [status, count] of Object.entries(data.breakdown || {})) {
-                if (count > 0) {
-                    const isProtected = protectedStatuses.includes(status);
-                    const label = subLabels[status] || status;
-                    html += `
-                        <div style="background: ${isProtected ? '#fdf0f0' : '#e6f4ea'}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${isProtected ? '#d63638' : '#2ea64a'}; display: inline-flex; align-items: center; gap: 6px;">
-                            <strong>${formatNumber(count)}</strong>
-                            <span style="color: #646970;">${label}</span>
-                            ${isProtected ? '<span style="color: #d63638; font-size: 10px;">Protected</span>' : '<span style="color: #2ea64a; font-size: 10px;">Safe</span>'}
-                        </div>
-                    `;
-                    if (isProtected) {
-                        totalProtected += count;
-                    } else {
-                        totalEligible += count;
-                    }
-                }
-            }
+            // Get selected subscription statuses
+            const selectedSubStatuses = Array.from(
+                document.querySelectorAll('#woam-subscription-statuses input:checked:not(:disabled)')
+            ).map(cb => cb.value);
             
+            // Show total count
             if (orderCountEl) {
                 orderCountEl.textContent = `${formatNumber(data.total || 0)} orders`;
             }
             
-            breakdownContainer.innerHTML = html || '<p style="color: #646970; font-size: 12px;">No subscription orders found</p>';
+            // Show breakdown by subscription status
+            if (data.breakdown && Object.keys(data.breakdown).length > 0) {
+                for (const [status, count] of Object.entries(data.breakdown)) {
+                    if (count > 0) {
+                        const isProtected = protectedStatuses.includes(status);
+                        const isEligible = eligibleStatuses.includes(status);
+                        const label = subLabels[status] || status;
+                        const isSelected = selectedSubStatuses.includes(status);
+                        
+                        // Track for mini stats
+                        if (isProtected) {
+                            protectedCount += count;
+                            totalProtected += count;
+                        } else if (isEligible) {
+                            totalEligible += count;
+                            if (status === 'cancelled') cancelledCount += count;
+                            if (status === 'expired') expiredCount += count;
+                        }
+                        
+                        html += `
+                            <div style="background: ${isProtected ? '#fdf0f0' : '#e6f4ea'}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${isProtected ? '#d63638' : '#2ea64a'}; display: inline-flex; align-items: center; gap: 6px;">
+                                <strong>${formatNumber(count)}</strong>
+                                <span style="color: #646970;">${label}</span>
+                                ${isProtected ? '<span style="color: #d63638; font-size: 10px;">🔒 Protected</span>' : ''}
+                                ${isEligible ? '<span style="color: #2ea64a; font-size: 10px;">✓ Safe</span>' : ''}
+                                ${isSelected && isEligible ? '<span style="color: #7f54b3; font-size: 10px;">(selected)</span>' : ''}
+                            </div>
+                        `;
+                    }
+                }
+            } else {
+                html = '<p style="color: #646970; font-size: 12px;">No subscription orders found</p>';
+            }
+            
+            // Update mini stats
+            updateSubscriptionMiniStats(protectedCount, cancelledCount, expiredCount, totalEligible);
+            
+            breakdownContainer.innerHTML = html;
             totalContainer.innerHTML = `
-                <strong>Eligible: ${formatNumber(totalEligible)}</strong>
+                <strong>Eligible for archiving: ${formatNumber(totalEligible)}</strong>
                 <span style="color: #d63638; margin-left: 16px;">
                     Protected: ${formatNumber(totalProtected)}
                 </span>
             `;
             
+            // Update checkbox counts
+            updateSubscriptionCheckboxCounts(data.breakdown);
+            
         } catch (err) {
             breakdownContainer.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
+        }
+    }
+
+    /**
+     * Update subscription mini stats
+     */
+    function updateSubscriptionMiniStats(protectedCount, cancelledCount, expiredCount, eligibleCount) {
+        const protectedEl = document.getElementById('woam-subs-protected');
+        const cancelledEl = document.getElementById('woam-subs-cancelled');
+        const expiredEl = document.getElementById('woam-subs-expired');
+        const eligibleEl = document.getElementById('woam-subs-eligible');
+        
+        if (protectedEl) protectedEl.textContent = formatNumber(protectedCount);
+        if (cancelledEl) cancelledEl.textContent = formatNumber(cancelledCount);
+        if (expiredEl) expiredEl.textContent = formatNumber(expiredCount);
+        if (eligibleEl) eligibleEl.textContent = formatNumber(eligibleCount);
+    }
+
+    /**
+     * Update subscription checkbox counts
+     */
+    function updateSubscriptionCheckboxCounts(breakdown) {
+        const statusMap = {
+            'active': 'woam-subs-active-count',
+            'pending-cancel': 'woam-subs-pending-cancel-count',
+            'on-hold': 'woam-subs-on-hold-count',
+            'cancelled': 'woam-subs-cancelled-count',
+            'expired': 'woam-subs-expired-count',
+            'failed': 'woam-subs-failed-count'
+        };
+        
+        for (const [status, elementId] of Object.entries(statusMap)) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                const count = breakdown[status] || 0;
+                el.textContent = `(${formatNumber(count)})`;
+            }
         }
     }
 
