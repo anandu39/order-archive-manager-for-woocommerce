@@ -26,31 +26,54 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
     <div class="woam-step woam-step--active" data-step="1">
         <h2><?php esc_html_e( 'Step 1: Select Orders', 'woo-order-archive-manager' ); ?></h2>
 
-        <!-- Date Selection -->
+        <!-- ============================================================ -->
+        <!-- ENHANCED DATE RANGE SELECTION                                 -->
+        <!-- ============================================================ -->
         <div class="woam-field-group">
-            <label><?php esc_html_e( 'Archive orders placed before', 'woo-order-archive-manager' ); ?></label>
+            <label><?php esc_html_e( 'Archive orders placed between', 'woo-order-archive-manager' ); ?></label>
 
-            <div class="woam-presets">
-                <button type="button" class="woam-preset-btn" data-month="3"><?php esc_html_e( '3 months ago', 'woo-order-archive-manager' ); ?></button>
-                <button type="button" class="woam-preset-btn" data-month="6"><?php esc_html_e( '6 months ago', 'woo-order-archive-manager' ); ?></button>
-                <button type="button" class="woam-preset-btn" data-month="12"><?php esc_html_e( '1 year ago', 'woo-order-archive-manager' ); ?></button>
-                <button type="button" class="woam-preset-btn" data-month="24"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?></button>
+            <div class="woam-date-range">
+                <div class="woam-date-input-wrapper">
+                    <span class="dashicons dashicons-calendar-alt"></span>
+                    <input type="date" id="woam-date-from" class="woam-input" />
+                    <span class="woam-date-label"><?php esc_html_e( 'From', 'woo-order-archive-manager' ); ?></span>
+                </div>
+                <span class="woam-date-separator"><?php esc_html_e( 'to', 'woo-order-archive-manager' ); ?></span>
+                <div class="woam-date-input-wrapper">
+                    <span class="dashicons dashicons-calendar-alt"></span>
+                    <input type="date" id="woam-date-to" class="woam-input" />
+                    <span class="woam-date-label"><?php esc_html_e( 'To', 'woo-order-archive-manager' ); ?></span>
+                </div>
             </div>
 
-            <input type="date" id="woam-before-date" class="woam-input" />
+            <div class="woam-presets">
+                <button type="button" class="woam-preset-btn" data-preset="3months"><?php esc_html_e( '3 months ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-preset="6months"><?php esc_html_e( '6 months ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-preset="12months"><?php esc_html_e( '1 year ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-preset="24months"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?></button>
+                <button type="button" class="woam-preset-btn" data-preset="custom"><?php esc_html_e( 'Custom Range', 'woo-order-archive-manager' ); ?></button>
+            </div>
         </div>
 
-        <!-- Order Analysis Preview -->
-        <div id="woam-order-analysis" style="display: none; margin: 16px 0;">
-            <h4 style="font-size: 14px; margin-bottom: 12px;"><?php esc_html_e( 'Order Analysis', 'woo-order-archive-manager' ); ?></h4>
-            <div id="woam-order-breakdown" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;"></div>
-            <div id="woam-order-total" style="font-size: 13px; color: #646970;"></div>
+        <!-- ============================================================ -->
+        <!-- GENERAL ORDER ANALYSIS - Auto-populated when date selected    -->
+        <!-- ============================================================ -->
+        <div id="woam-general-analysis" style="display: none; margin: 16px 0; padding: 16px; background: #f8f9fa; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="font-size: 13px; margin: 0; color: #1d2327; display: flex; align-items: center; gap: 8px;">
+                    <span class="dashicons dashicons-archive" style="color: #7f54b3;"></span>
+                    <?php esc_html_e( 'General Orders Analysis', 'woo-order-archive-manager' ); ?>
+                </h4>
+                <span style="font-size: 11px; color: #646970;" id="woam-general-order-count">0 <?php esc_html_e( 'orders', 'woo-order-archive-manager' ); ?></span>
+            </div>
+            <div id="woam-general-breakdown" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;"></div>
+            <div id="woam-general-total" style="font-size: 13px; color: #646970;"></div>
         </div>
 
         <!-- ============================================================ -->
         <!-- SECTION A - GENERAL ORDER ARCHIVE                             -->
         <!-- ============================================================ -->
-        <div class="woam-section woam-section--general" style="margin-top: 24px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+        <div class="woam-section woam-section--general">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span class="dashicons dashicons-archive" style="color: #7f54b3; font-size: 20px;"></span>
                 <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #1d2327;">
@@ -78,20 +101,28 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
                 <span class="dashicons dashicons-info" style="font-size: 14px;"></span>
                 <?php esc_html_e( 'Archiving General Orders does not affect active subscriptions or subscription renewals.', 'woo-order-archive-manager' ); ?>
             </p>
-
-            <div class="woam-step-actions" style="margin-top: 16px;">
-                <button type="button" class="woam-button woam-button--primary" id="woam-archive-general-preview">
-                    <span class="dashicons dashicons-chart-line"></span>
-                    <?php esc_html_e( 'Preview General Orders', 'woo-order-archive-manager' ); ?>
-                </button>
-            </div>
         </div>
 
         <?php if ( $subscriptions_active ) : ?>
         <!-- ============================================================ -->
+        <!-- SUBSCRIPTION ORDER ANALYSIS - Auto-populated                  -->
+        <!-- ============================================================ -->
+        <div id="woam-subscription-analysis" style="display: none; margin: 16px 0; padding: 16px; background: #f8f9fa; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="font-size: 13px; margin: 0; color: #1d2327; display: flex; align-items: center; gap: 8px;">
+                    <span class="dashicons dashicons-cart" style="color: #7f54b3;"></span>
+                    <?php esc_html_e( 'Subscription Orders Analysis', 'woo-order-archive-manager' ); ?>
+                </h4>
+                <span style="font-size: 11px; color: #646970;" id="woam-subscription-order-count">0 <?php esc_html_e( 'orders', 'woo-order-archive-manager' ); ?></span>
+            </div>
+            <div id="woam-subscription-breakdown" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;"></div>
+            <div id="woam-subscription-total" style="font-size: 13px; color: #646970;"></div>
+        </div>
+
+        <!-- ============================================================ -->
         <!-- SECTION B - SUBSCRIPTION ORDER ARCHIVE                       -->
         <!-- ============================================================ -->
-        <div class="woam-section woam-section--subscription" style="margin-top: 24px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+        <div class="woam-section woam-section--subscription">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span class="dashicons dashicons-cart" style="color: #7f54b3; font-size: 20px;"></span>
                 <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #1d2327;">
@@ -145,52 +176,45 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
 
             <!-- Subscription Filters -->
             <div class="woam-field-group" style="margin-bottom: 0;">
-                <label style="font-size: 13px; font-weight: 600;">
-                    <?php esc_html_e( 'Subscription statuses to include', 'woo-order-archive-manager' ); ?>
+                <label style="font-size: 13px; font-weight: 600; color: #646970;">
+                    <?php esc_html_e( 'Select subscription statuses to archive', 'woo-order-archive-manager' ); ?>
                 </label>
                 <div class="woam-checkbox-grid" id="woam-subscription-statuses">
                     <label class="woam-checkbox" style="opacity: 0.5; cursor: not-allowed;">
-                        <input type="checkbox" disabled checked>
+                        <input type="checkbox" disabled>
                         <?php esc_html_e( 'Active', 'woo-order-archive-manager' ); ?>
                         <span class="woam-checkbox-count">(<?php esc_html_e( 'protected', 'woo-order-archive-manager' ); ?>)</span>
                     </label>
                     <label class="woam-checkbox" style="opacity: 0.5; cursor: not-allowed;">
-                        <input type="checkbox" disabled checked>
+                        <input type="checkbox" disabled>
                         <?php esc_html_e( 'Pending Cancel', 'woo-order-archive-manager' ); ?>
                         <span class="woam-checkbox-count">(<?php esc_html_e( 'protected', 'woo-order-archive-manager' ); ?>)</span>
                     </label>
                     <label class="woam-checkbox" style="opacity: 0.5; cursor: not-allowed;">
-                        <input type="checkbox" disabled checked>
+                        <input type="checkbox" disabled>
                         <?php esc_html_e( 'On Hold', 'woo-order-archive-manager' ); ?>
                         <span class="woam-checkbox-count">(<?php esc_html_e( 'protected', 'woo-order-archive-manager' ); ?>)</span>
                     </label>
                     <label class="woam-checkbox">
-                        <input type="checkbox" name="subscription_statuses[]" value="wc-cancelled" checked>
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-cancelled">
                         <?php esc_html_e( 'Cancelled', 'woo-order-archive-manager' ); ?>
-                        <span class="woam-checkbox-count">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
+                        <span class="woam-checkbox-count" style="color: #2ea64a;">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
                     </label>
                     <label class="woam-checkbox">
-                        <input type="checkbox" name="subscription_statuses[]" value="wc-expired" checked>
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-expired">
                         <?php esc_html_e( 'Expired', 'woo-order-archive-manager' ); ?>
-                        <span class="woam-checkbox-count">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
+                        <span class="woam-checkbox-count" style="color: #2ea64a;">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
                     </label>
                     <label class="woam-checkbox">
-                        <input type="checkbox" name="subscription_statuses[]" value="wc-failed" checked>
+                        <input type="checkbox" name="subscription_statuses[]" value="wc-failed">
                         <?php esc_html_e( 'Failed', 'woo-order-archive-manager' ); ?>
-                        <span class="woam-checkbox-count">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
+                        <span class="woam-checkbox-count" style="color: #2ea64a;">(<?php esc_html_e( 'safe', 'woo-order-archive-manager' ); ?>)</span>
                     </label>
                 </div>
                 <p style="font-size: 11px; color: #646970; margin-top: 8px;">
                     <span class="dashicons dashicons-shield" style="color: #7f54b3; font-size: 14px;"></span>
                     <?php esc_html_e( 'Protected subscription orders are automatically skipped. Only cancelled, expired, and failed subscriptions can be archived.', 'woo-order-archive-manager' ); ?>
                 </p>
-            </div>
-
-            <div class="woam-step-actions" style="margin-top: 16px;">
-                <button type="button" class="woam-button woam-button--primary" id="woam-archive-subscription-preview">
-                    <span class="dashicons dashicons-chart-line"></span>
-                    <?php esc_html_e( 'Preview Subscription Orders', 'woo-order-archive-manager' ); ?>
-                </button>
             </div>
         </div>
         <?php endif; ?>
@@ -208,11 +232,11 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
         </div>
 
         <!-- Batch Size -->
-        <div class="woam-field-group" style="margin-top: 16px;">
-            <label for="woam-batch-size">
+        <div class="woam-field-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
+            <label for="woam-batch-size" style="display: flex; align-items: center; gap: 8px;">
                 <?php esc_html_e( 'Batch Size', 'woo-order-archive-manager' ); ?>
-                <span class="dashicons dashicons-info" style="font-size: 14px; color: #646970; cursor: help;" 
-                      title="<?php esc_attr_e( 'Controls how many orders are processed per batch. Higher values complete faster but use more server resources.', 'woo-order-archive-manager' ); ?>">
+                <span class="dashicons dashicons-info" style="font-size: 16px; color: #7f54b3; cursor: help;" 
+                      title="<?php esc_attr_e( 'Controls how many orders are processed per batch. Higher values complete faster but use more server resources. Recommended: Small stores: 250 | Medium: 500 | Large: 1000', 'woo-order-archive-manager' ); ?>">
                 </span>
             </label>
             <select id="woam-batch-size" class="woam-input" style="width: auto; min-width: 120px;">
@@ -247,10 +271,7 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
                 <?php esc_html_e( 'Back', 'woo-order-archive-manager' ); ?>
             </button>
             <button type="button" class="woam-button woam-button--primary" id="woam-archive-step2-next">
-                <?php esc_html_e(
-                    'Continue',
-                    'woo-order-archive-manager'
-                ); ?>
+                <?php esc_html_e( 'Continue', 'woo-order-archive-manager' ); ?>
             </button>
         </div>
     </div>

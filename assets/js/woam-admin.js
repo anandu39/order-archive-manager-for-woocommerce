@@ -66,110 +66,21 @@
     }
 
     /**
-     * Load opportunity banner with impactful message
+     * HTML escaping function
      */
-    async function loadOpportunityBanner() {
-        const banner = document.getElementById('woam-opportunity-banner');
-        const messageEl = document.getElementById('woam-opportunity-message');
-        const ctaBtn = document.getElementById('woam-opportunity-cta');
-        
-        if (!banner) return;
-        
-        try {
-            // Pre-compute the 12-months-ago date up front since it doesn't
-            // depend on any network response.
-            const twelveMonthsAgo = new Date();
-            twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-            const dateStr = twelveMonthsAgo.toISOString().split('T')[0];
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
 
-            // None of these four calls depend on each other's results, so
-            // fire them all in parallel instead of awaiting one at a time.
-            // This cuts banner load time down to the slowest single request
-            // instead of the sum of all four.
-            const [dbStats, orderData, totalOrdersData, eligibleData] = await Promise.all([
-                woamPost('hw_woam_get_db_stats'),
-                woamPost('hw_woam_get_archive_breakdown'),
-                woamPost('hw_woam_get_count', {
-                    mode: 'archive',
-                    before_date: '2099-01-01',
-                    statuses: ['wc-completed', 'wc-processing', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed']
-                }),
-                woamPost('hw_woam_get_count', {
-                    mode: 'archive',
-                    before_date: dateStr,
-                    statuses: ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
-                }),
-            ]);
-
-            const totalBytes = dbStats.total_bytes || 0;
-            const totalFormatted = dbStats.total_formatted || '0 B';
-            const totalArchived = orderData.total_count || 0;
-            const totalOrders = totalOrdersData.count || 0;
-
-            // Calculate eligible orders (completed/cancelled/refunded/failed older than 12 months)
-            const eligibleOrders = totalOrders > 0 ? (eligibleData.count || 0) : 0;
-            
-            // Calculate estimated savings (eligible orders * average size)
-            const avgOrderSize = totalBytes > 0 && totalOrders > 0 ? totalBytes / totalOrders : 50 * 1024;
-            const estimatedSavings = eligibleOrders * avgOrderSize;
-            const estimatedSavingsFormatted = formatBytes(estimatedSavings);
-            
-            // Build message
-            let message = '';
-            let showCta = false;
-            
-            if (totalArchived === 0 && totalBytes > 100 * 1024 * 1024) {
-                message = `
-                    <strong>Your WooCommerce store contains ${totalFormatted} of historical order data.</strong><br>
-                    Large order tables increase backup sizes, slow order searches, and add unnecessary load on reporting and administration tasks.<br>
-                    Based on current data, approximately <strong>${formatNumber(eligibleOrders)}</strong> orders may be eligible for archiving.<br>
-                    <span style="color: #7f54b3; font-weight: 600;">Potential storage reduction: ${estimatedSavingsFormatted}</span>
-                `;
-                showCta = true;
-            } else if (totalArchived === 0) {
-                message = `
-                    <strong>Ready to optimize your WooCommerce database?</strong><br>
-                    Archiving old orders can significantly improve admin performance and reduce backup sizes.
-                    ${eligibleOrders > 0 ? `You have <strong>${formatNumber(eligibleOrders)}</strong> orders that may be eligible for archiving.` : ''}
-                `;
-                showCta = true;
-            } else if (totalArchived > 0 && totalBytes > 500 * 1024 * 1024) {
-                message = `
-                    <strong>Great progress! You've archived ${formatNumber(totalArchived)} orders.</strong><br>
-                    Your database still contains ${totalFormatted} of order data.
-                    ${eligibleOrders > 0 ? `Another <strong>${formatNumber(eligibleOrders)}</strong> orders are eligible for archiving.` : ''}
-                    <span style="color: #2ea64a; font-weight: 600;">Continue optimizing to reclaim more space.</span>
-                `;
-                showCta = true;
-            } else {
-                message = `
-                    <strong>Your WooCommerce database is well-maintained!</strong><br>
-                    Keep monitoring your database health to ensure optimal performance.
-                    ${totalArchived > 0 ? `You've already archived ${formatNumber(totalArchived)} orders.` : ''}
-                `;
-                showCta = false;
-            }
-            
-            messageEl.innerHTML = message;
-            
-            if (showCta && eligibleOrders > 0) {
-                ctaBtn.style.display = 'inline-flex';
-                // Use onclick (not addEventListener) so repeated banner reloads
-                // replace the handler instead of stacking duplicate listeners.
-                ctaBtn.onclick = () => {
-                    document.querySelector('.woam-tab[data-tab="archive"]')?.click();
-                };
-            } else {
-                ctaBtn.style.display = 'none';
-            }
-            
-            banner.style.display = 'block';
-            
-        } catch (err) {
-            console.error('Failed to load opportunity banner:', err);
-            messageEl.innerHTML = 'Reduce database bloat, improve admin performance, and restore archived orders anytime with one click.';
-            banner.style.display = 'block';
-        }
+    /**
+     * Formats numbers with thousands separators
+     */
+    function formatNumber(n) {
+        return parseInt(n).toLocaleString();
     }
 
     /**
@@ -186,24 +97,6 @@
             return (bytes / 1024).toFixed(1) + ' KB';
         }
         return bytes + ' B';
-    }
-
-    /**
-     * HTML escaping function
-     */
-    function escHtml(str) {
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
-    /**
-     * Formats numbers with thousands separators
-     */
-    function formatNumber(n) {
-        return parseInt(n).toLocaleString();
     }
 
     /**
@@ -254,10 +147,135 @@
     }
 
     /**
+     * Show notification message
+     */
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `woam-notification woam-notification--${type}`;
+        
+        let icon = 'info';
+        if (type === 'success') icon = 'yes-alt';
+        if (type === 'warning') icon = 'warning';
+        if (type === 'error') icon = 'warning';
+        
+        notification.innerHTML = `
+            <span class="dashicons dashicons-${icon}"></span>
+            <span>${escHtml(message)}</span>
+            <button class="woam-notification-close">&times;</button>
+        `;
+        
+        document.querySelector('.woam-wrap').prepend(notification);
+        
+        setTimeout(() => {
+            notification.classList.add('woam-notification--fadeout');
+            setTimeout(() => notification.remove(), 300);
+        }, 5000);
+        
+        notification.querySelector('.woam-notification-close')?.addEventListener('click', () => {
+            notification.remove();
+        });
+    }
+
+    /**
      * ============================================================
-     * OVERVIEW TAB FUNCTIONS (Phase 2)
+     * OVERVIEW TAB FUNCTIONS
      * ============================================================
      */
+
+    /**
+     * Load opportunity banner with impactful message
+     */
+    async function loadOpportunityBanner() {
+        const banner = document.getElementById('woam-opportunity-banner');
+        const messageEl = document.getElementById('woam-opportunity-message');
+        const ctaBtn = document.getElementById('woam-opportunity-cta');
+        
+        if (!banner) return;
+        
+        try {
+            const twelveMonthsAgo = new Date();
+            twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+            const dateStr = twelveMonthsAgo.toISOString().split('T')[0];
+
+            const [dbStats, orderData, totalOrdersData, eligibleData] = await Promise.all([
+                woamPost('hw_woam_get_db_stats'),
+                woamPost('hw_woam_get_archive_breakdown'),
+                woamPost('hw_woam_get_count', {
+                    mode: 'archive',
+                    before_date: '2099-01-01',
+                    statuses: ['wc-completed', 'wc-processing', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed']
+                }),
+                woamPost('hw_woam_get_count', {
+                    mode: 'archive',
+                    before_date: dateStr,
+                    statuses: ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
+                }),
+            ]);
+
+            const totalBytes = dbStats.total_bytes || 0;
+            const totalFormatted = dbStats.total_formatted || '0 B';
+            const totalArchived = orderData.total_count || 0;
+            const totalOrders = totalOrdersData.count || 0;
+            const eligibleOrders = totalOrders > 0 ? (eligibleData.count || 0) : 0;
+            
+            const avgOrderSize = totalBytes > 0 && totalOrders > 0 ? totalBytes / totalOrders : 50 * 1024;
+            const estimatedSavings = eligibleOrders * avgOrderSize;
+            const estimatedSavingsFormatted = formatBytes(estimatedSavings);
+            
+            let message = '';
+            let showCta = false;
+            
+            if (totalArchived === 0 && totalBytes > 100 * 1024 * 1024) {
+                message = `
+                    <strong>Your WooCommerce store contains ${totalFormatted} of historical order data.</strong><br>
+                    Large order tables increase backup sizes, slow order searches, and add unnecessary load on reporting and administration tasks.<br>
+                    Based on current data, approximately <strong>${formatNumber(eligibleOrders)}</strong> orders may be eligible for archiving.<br>
+                    <span style="color: #7f54b3; font-weight: 600;">Potential storage reduction: ${estimatedSavingsFormatted}</span>
+                `;
+                showCta = true;
+            } else if (totalArchived === 0) {
+                message = `
+                    <strong>Ready to optimize your WooCommerce database?</strong><br>
+                    Archiving old orders can significantly improve admin performance and reduce backup sizes.
+                    ${eligibleOrders > 0 ? `You have <strong>${formatNumber(eligibleOrders)}</strong> orders that may be eligible for archiving.` : ''}
+                `;
+                showCta = true;
+            } else if (totalArchived > 0 && totalBytes > 500 * 1024 * 1024) {
+                message = `
+                    <strong>Great progress! You've archived ${formatNumber(totalArchived)} orders.</strong><br>
+                    Your database still contains ${totalFormatted} of order data.
+                    ${eligibleOrders > 0 ? `Another <strong>${formatNumber(eligibleOrders)}</strong> orders are eligible for archiving.` : ''}
+                    <span style="color: #2ea64a; font-weight: 600;">Continue optimizing to reclaim more space.</span>
+                `;
+                showCta = true;
+            } else {
+                message = `
+                    <strong>Your WooCommerce database is well-maintained!</strong><br>
+                    Keep monitoring your database health to ensure optimal performance.
+                    ${totalArchived > 0 ? `You've already archived ${formatNumber(totalArchived)} orders.` : ''}
+                `;
+                showCta = false;
+            }
+            
+            messageEl.innerHTML = message;
+            
+            if (showCta && eligibleOrders > 0) {
+                ctaBtn.style.display = 'inline-flex';
+                ctaBtn.onclick = () => {
+                    document.querySelector('.woam-tab[data-tab="archive"]')?.click();
+                };
+            } else {
+                ctaBtn.style.display = 'none';
+            }
+            
+            banner.style.display = 'block';
+            
+        } catch (err) {
+            console.error('Failed to load opportunity banner:', err);
+            messageEl.innerHTML = 'Reduce database bloat, improve admin performance, and restore archived orders anytime with one click.';
+            banner.style.display = 'block';
+        }
+    }
 
     /**
      * Loads health score with circular gauge
@@ -352,7 +370,6 @@
             container.classList.remove('woam-loading');
             container.innerHTML = html;
 
-            // Apply recommendation button
             const applyBtn = container.querySelector('[data-use-recommendation]');
             if (applyBtn) {
                 applyBtn.addEventListener('click', () => {
@@ -360,7 +377,6 @@
                 });
             }
 
-            // Dismiss recommendation button
             const dismissBtn = container.querySelector('[data-dismiss-recommendation]');
             if (dismissBtn) {
                 dismissBtn.addEventListener('click', async () => {
@@ -383,25 +399,18 @@
 
     /**
      * Apply a recommendation by pre-filling archive tab
-     *
-     * @param {Object} recommendation Recommendation data
      */
     function applyRecommendation(recommendation) {
-        // Store recommendation in sessionStorage for archive tab
         sessionStorage.setItem('woam_recommendation', JSON.stringify({
             date: recommendation.recommended_date,
             statuses: recommendation.recommended_statuses || ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
         }));
         
-        // Also store that this was from a recommendation
         sessionStorage.setItem('woam_recommendation_applied', 'true');
         
-        // Switch to archive tab
         const archiveTab = document.querySelector('.woam-tab[data-tab="archive"]');
         if (archiveTab) {
             archiveTab.click();
-            
-            // Show a success message
             setTimeout(() => {
                 showNotification('Recommendation applied! Review the filters and click "Start Archive".', 'success');
             }, 500);
@@ -410,8 +419,6 @@
 
     /**
      * Dismiss a recommendation
-     *
-     * @param {string} recommendationId Recommendation ID
      */
     async function dismissRecommendation(recommendationId) {
         try {
@@ -421,41 +428,6 @@
         } catch (err) {
             console.error('Failed to dismiss recommendation:', err);
         }
-    }
-
-    /**
-     * Show notification message
-     *
-     * @param {string} message Message to display
-     * @param {string} type Type: 'success', 'warning', 'error', 'info'
-     */
-    function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `woam-notification woam-notification--${type}`;
-        
-        let icon = 'info';
-        if (type === 'success') icon = 'yes-alt';
-        if (type === 'warning') icon = 'warning';
-        if (type === 'error') icon = 'warning';
-        
-        notification.innerHTML = `
-            <span class="dashicons dashicons-${icon}"></span>
-            <span>${escHtml(message)}</span>
-            <button class="woam-notification-close">&times;</button>
-        `;
-        
-        document.querySelector('.woam-wrap').prepend(notification);
-        
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => {
-            notification.classList.add('woam-notification--fadeout');
-            setTimeout(() => notification.remove(), 300);
-        }, 5000);
-        
-        // Close button
-        notification.querySelector('.woam-notification-close')?.addEventListener('click', () => {
-            notification.remove();
-        });
     }
 
     /**
@@ -618,7 +590,6 @@
         try {
             const data = await woamPost('hw_woam_get_growth_forecast');
             
-            // Build historical chart bars
             let historyHtml = '';
             if (data.historical_data && data.historical_data.length > 0) {
                 const maxSize = Math.max(...data.historical_data.map(d => d.size_mb), data.monthly_growth_rate_mb * 12);
@@ -674,7 +645,6 @@
             container.classList.remove('woam-loading');
             container.innerHTML = html;
             
-            // Attach event listener to the archive button
             const archiveBtn = container.querySelector('[data-archive-suggested]');
             if (archiveBtn) {
                 archiveBtn.addEventListener('click', () => {
@@ -683,7 +653,6 @@
             }
 
         } catch (err) {
-            // Fallback to simple display if API fails
             container.classList.remove('woam-loading');
             container.innerHTML = `
                 <div class="woam-forecast-current">
@@ -698,7 +667,7 @@
     }
 
     /**
-     * Loads storage composition chart (replaces loadDbStats)
+     * Loads storage composition chart
      */
     async function loadStorageChart() {
         const container = document.getElementById('woam-storage-chart');
@@ -752,7 +721,7 @@
     }
 
     /**
-     * Loads recent activity (enhanced with Dashicons)
+     * Loads recent activity
      */
     async function loadRecentActivity() {
         const container = document.getElementById('woam-recent-activity');
@@ -820,13 +789,317 @@
 
     /**
      * ============================================================
-     * ARCHIVE TAB FUNCTIONS (Original)
+     * DATE RANGE PICKER FUNCTIONS
      * ============================================================
      */
 
     /**
+     * Initialize enhanced date range picker with min/max limits
+     */
+    function initDateRangePicker() {
+        const fromInput = document.getElementById('woam-date-from');
+        const toInput = document.getElementById('woam-date-to');
+        
+        if (!fromInput || !toInput) return;
+        
+        // Get oldest order date for min limit
+        fetchOldestOrderDate().then(oldestDate => {
+            if (oldestDate) {
+                fromInput.min = oldestDate;
+                if (toInput.value && toInput.value < oldestDate) {
+                    toInput.value = oldestDate;
+                }
+            }
+        });
+        
+        // Set max date to today
+        const today = new Date().toISOString().split('T')[0];
+        toInput.max = today;
+        
+        // When 'From' date changes, update 'To' min
+        fromInput.addEventListener('change', function() {
+            if (this.value) {
+                toInput.min = this.value;
+                if (toInput.value && toInput.value < this.value) {
+                    toInput.value = this.value;
+                }
+                loadArchiveAnalysisRange();
+            }
+        });
+        
+        // When 'To' date changes
+        toInput.addEventListener('change', function() {
+            if (this.value) {
+                loadArchiveAnalysisRange();
+            }
+        });
+
+        // Initial load if dates are already set
+        if (fromInput.value && toInput.value) {
+            loadArchiveAnalysisRange();
+        }
+    }
+
+    /**
+     * Fetch oldest order date from the database
+     */
+    async function fetchOldestOrderDate() {
+        try {
+            const data = await woamPost('hw_woam_get_oldest_order_date');
+            return data.oldest_date || null;
+        } catch (err) {
+            console.error('Failed to fetch oldest order date:', err);
+            return null;
+        }
+    }
+
+    /**
+     * Enhanced preset button handler with range selection
+     */
+    function enhancePresetButtonsRange() {
+        const container = document.querySelector('.woam-steps[data-mode="archive"]');
+        if (!container) return;
+
+        // Hide date inputs by default — only shown when "Custom Range" is active.
+        const dateRange = document.querySelector('.woam-date-range');
+        if (dateRange) dateRange.style.display = 'none';
+
+        container.querySelectorAll('.woam-preset-btn').forEach(btn => {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.addEventListener('click', function() {
+                const preset = this.dataset.preset;
+                const fromInput = document.getElementById('woam-date-from');
+                const toInput = document.getElementById('woam-date-to');
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                
+                container.querySelectorAll('.woam-preset-btn').forEach(b => {
+                    b.classList.remove('woam-preset-btn--active');
+                });
+                
+                if (preset === 'custom') {
+                    fromInput.closest('.woam-date-range').style.display = 'flex';
+                    fromInput.disabled = false;
+                    toInput.disabled = false;
+                    fromInput.focus();
+                    this.classList.add('woam-preset-btn--active');
+                    return;
+                }
+                
+                let months = 0;
+                switch (preset) {
+                    case '3months': months = 3; break;
+                    case '6months': months = 6; break;
+                    case '12months': months = 12; break;
+                    case '24months': months = 24; break;
+                    default: return;
+                }
+                
+                const fromDate = new Date();
+                fromDate.setMonth(fromDate.getMonth() - months);
+                
+                const yyyy = fromDate.getFullYear();
+                const mm = String(fromDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(fromDate.getDate()).padStart(2, '0');
+                const fromStr = `${yyyy}-${mm}-${dd}`;
+                
+                fromInput.value = fromStr;
+                toInput.value = todayStr;
+                
+                fromInput.disabled = false;
+                toInput.disabled = false;
+                
+                this.classList.add('woam-preset-btn--active');
+
+                // Hide custom date inputs when a preset is selected.
+                if (dateRange) dateRange.style.display = 'none';
+
+                loadArchiveAnalysisRange();
+                
+            });
+        });
+    }
+
+    /**
+     * Load both general and subscription analysis with date range
+     */
+    async function loadArchiveAnalysisRange() {
+        const fromDate = document.getElementById('woam-date-from')?.value;
+        const toDate = document.getElementById('woam-date-to')?.value;
+        
+        if (!fromDate || !toDate) {
+            document.getElementById('woam-general-analysis').style.display = 'none';
+            document.getElementById('woam-subscription-analysis').style.display = 'none';
+            return;
+        }
+        
+        await loadGeneralAnalysisRange(fromDate, toDate);
+        
+        if (document.querySelector('.woam-section--subscription')) {
+            await loadSubscriptionAnalysisRange(fromDate, toDate);
+        }
+    }
+
+    /**
+     * Load General Orders Analysis with date range
+     */
+    async function loadGeneralAnalysisRange(fromDate, toDate) {
+        const container = document.getElementById('woam-general-analysis');
+        const breakdownContainer = document.getElementById('woam-general-breakdown');
+        const totalContainer = document.getElementById('woam-general-total');
+        const orderCountEl = document.getElementById('woam-general-order-count');
+        
+        const statuses = Array.from(
+            document.querySelectorAll('#woam-archive-statuses input:checked')
+        ).map(cb => cb.value);
+        
+        if (statuses.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        breakdownContainer.innerHTML = '<span class="woam-loading">Loading...</span>';
+        
+        try {
+            const data = await woamPost('hw_woam_preview_general_orders_range', {
+                from_date: fromDate,
+                to_date: toDate,
+                statuses: statuses
+            });
+            
+            const statusColors = {
+                'wc-completed': { bg: '#e6f4ea', border: '#2ea64a', label: 'Completed' },
+                'wc-processing': { bg: '#e6f0fa', border: '#2271b1', label: 'Processing' },
+                'wc-on-hold': { bg: '#fef9e7', border: '#dba617', label: 'On Hold' },
+                'wc-cancelled': { bg: '#fdf0f0', border: '#d63638', label: 'Cancelled' },
+                'wc-refunded': { bg: '#fef9e7', border: '#dba617', label: 'Refunded' },
+                'wc-failed': { bg: '#fdf0f0', border: '#d63638', label: 'Failed' },
+                'wc-pending': { bg: '#f8f4ff', border: '#7f54b3', label: 'Pending' },
+            };
+            
+            let html = '';
+            let totalEligible = 0;
+            const eligibleStatuses = ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'];
+            
+            for (const [status, count] of Object.entries(data.breakdown || {})) {
+                if (count > 0) {
+                    const color = statusColors[status] || { bg: '#f0f0f1', border: '#646970', label: status.replace('wc-', '') };
+                    const isEligible = eligibleStatuses.includes(status);
+                    html += `
+                        <div style="background: ${color.bg}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${color.border}; display: inline-flex; align-items: center; gap: 6px;">
+                            <strong>${formatNumber(count)}</strong>
+                            <span style="color: #646970;">${color.label}</span>
+                            ${isEligible ? '<span style="color: #2ea64a; font-size: 10px;">✓</span>' : ''}
+                        </div>
+                    `;
+                    if (isEligible) {
+                        totalEligible += count;
+                    }
+                }
+            }
+            
+            if (orderCountEl) {
+                orderCountEl.textContent = `${formatNumber(data.total || 0)} orders`;
+            }
+            
+            breakdownContainer.innerHTML = html || '<p style="color: #646970; font-size: 12px;">No orders found for selected statuses</p>';
+            
+            if (data.estimated_savings_formatted) {
+                totalContainer.innerHTML = `
+                    <strong>Total eligible: ${formatNumber(totalEligible)}</strong>
+                    <span style="color: #7f54b3; margin-left: 16px;">
+                        Estimated savings: ${data.estimated_savings_formatted}
+                    </span>
+                `;
+            } else {
+                totalContainer.innerHTML = `<strong>Total eligible: ${formatNumber(totalEligible)}</strong>`;
+            }
+            
+        } catch (err) {
+            breakdownContainer.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
+        }
+    }
+
+    /**
+     * Load Subscription Orders Analysis with date range
+     */
+    async function loadSubscriptionAnalysisRange(fromDate, toDate) {
+        const container = document.getElementById('woam-subscription-analysis');
+        const breakdownContainer = document.getElementById('woam-subscription-breakdown');
+        const totalContainer = document.getElementById('woam-subscription-total');
+        const orderCountEl = document.getElementById('woam-subscription-order-count');
+        
+        container.style.display = 'block';
+        breakdownContainer.innerHTML = '<span class="woam-loading">Loading...</span>';
+        
+        try {
+            const data = await woamPost('hw_woam_preview_subscription_orders_range', {
+                from_date: fromDate,
+                to_date: toDate
+            });
+            
+            if (!data.subscriptions_active) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            const subLabels = {
+                'active': 'Active',
+                'cancelled': 'Cancelled',
+                'expired': 'Expired',
+                'failed': 'Failed',
+                'on-hold': 'On Hold',
+                'pending-cancel': 'Pending Cancel'
+            };
+            
+            const protectedStatuses = ['active', 'on-hold', 'pending-cancel'];
+            
+            let html = '';
+            let totalEligible = 0;
+            let totalProtected = 0;
+            
+            for (const [status, count] of Object.entries(data.breakdown || {})) {
+                if (count > 0) {
+                    const isProtected = protectedStatuses.includes(status);
+                    const label = subLabels[status] || status;
+                    html += `
+                        <div style="background: ${isProtected ? '#fdf0f0' : '#e6f4ea'}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${isProtected ? '#d63638' : '#2ea64a'}; display: inline-flex; align-items: center; gap: 6px;">
+                            <strong>${formatNumber(count)}</strong>
+                            <span style="color: #646970;">${label}</span>
+                            ${isProtected ? '<span style="color: #d63638; font-size: 10px;">Protected</span>' : '<span style="color: #2ea64a; font-size: 10px;">Safe</span>'}
+                        </div>
+                    `;
+                    if (isProtected) {
+                        totalProtected += count;
+                    } else {
+                        totalEligible += count;
+                    }
+                }
+            }
+            
+            if (orderCountEl) {
+                orderCountEl.textContent = `${formatNumber(data.total || 0)} orders`;
+            }
+            
+            breakdownContainer.innerHTML = html || '<p style="color: #646970; font-size: 12px;">No subscription orders found</p>';
+            totalContainer.innerHTML = `
+                <strong>Eligible: ${formatNumber(totalEligible)}</strong>
+                <span style="color: #d63638; margin-left: 16px;">
+                    Protected: ${formatNumber(totalProtected)}
+                </span>
+            `;
+            
+        } catch (err) {
+            breakdownContainer.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
+        }
+    }
+
+    /**
      * ============================================================
-     * REAL-TIME SAVINGS ESTIMATION
+     * ARCHIVE TAB FUNCTIONS
      * ============================================================
      */
 
@@ -849,12 +1122,11 @@
      * Fetches real-time savings estimate based on current filters
      */
     async function fetchRealTimeEstimate() {
-        const beforeDate = document.getElementById('woam-before-date').value;
+        const beforeDate = document.getElementById('woam-before-date')?.value;
         const statuses = Array.from(
             document.querySelectorAll('#woam-archive-statuses input:checked')
         ).map(cb => cb.value);
 
-        // Don't show estimate if no date or no statuses selected
         if (!beforeDate || statuses.length === 0) {
             const estimateContainer = document.getElementById('woam-real-time-estimate');
             if (estimateContainer) {
@@ -868,18 +1140,16 @@
         const contentEl = document.querySelector('.woam-estimate-content');
         const footerEl = document.getElementById('woam-estimate-detail');
 
-        // Show estimate container with loading state
         estimateContainer.style.display = 'block';
         loadingEl.style.display = 'flex';
         contentEl.style.opacity = '0.5';
 
         try {
             const data = await woamPost('hw_woam_get_savings_estimate', {
-                before_date: beforeDate,
-                statuses,
+                before_date: toDate,
+                statuses: allStatuses,
             });
 
-            // Update UI with real data
             document.getElementById('woam-estimate-order-count').textContent = formatNumber(data.order_count);
             document.getElementById('woam-estimate-space-saved').textContent = data.estimated_size;
 
@@ -902,7 +1172,6 @@
         }
     }
 
-    // Create debounced version for real-time updates
     const debouncedFetchEstimate = debounce(fetchRealTimeEstimate, 500);
 
     /**
@@ -914,50 +1183,12 @@
 
         if (!beforeDateInput) return;
 
-        // Listen to date changes
         beforeDateInput.addEventListener('change', () => {
             debouncedFetchEstimate();
         });
 
-        // Listen to status checkbox changes
         statusCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', () => {
-                debouncedFetchEstimate();
-            });
-        });
-
-        // Also trigger on preset button clicks (handled in existing code, but we need to also trigger estimate)
-        // We'll add a mutation observer or enhance the preset button handler
-    }
-
-    /**
-     * Enhanced preset button handler with estimate refresh
-     */
-    function enhancePresetButtons() {
-        const container = document.querySelector('.woam-steps[data-mode="archive"]');
-        if (!container) return;
-
-        container.querySelectorAll('.woam-preset-btn').forEach(btn => {
-            // Remove existing listeners to avoid duplicates
-            const newBtn = btn.cloneNode(true);
-            btn.parentNode.replaceChild(newBtn, btn);
-            
-            newBtn.addEventListener('click', () => {
-                const months = parseInt(newBtn.dataset.month);
-                const d = new Date();
-                d.setMonth(d.getMonth() - months);
-
-                const yyyy = d.getFullYear();
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-
-                const dateInput = document.getElementById('woam-before-date');
-                dateInput.value = `${yyyy}-${mm}-${dd}`;
-
-                container.querySelectorAll('.woam-preset-btn').forEach(b => b.classList.remove('woam-preset-btn--active'));
-                newBtn.classList.add('woam-preset-btn--active');
-
-                // Trigger real-time estimate
                 debouncedFetchEstimate();
             });
         });
@@ -992,7 +1223,7 @@
     }
 
     /**
-     * Apply recommendation from Overview tab (if exists)
+     * Apply recommendation from Overview tab
      */
     function applyRecommendationFromStorage() {
         const savedRec = sessionStorage.getItem('woam_recommendation');
@@ -1011,10 +1242,8 @@
                     });
                 }
                 
-                // Clear after applying
                 sessionStorage.removeItem('woam_recommendation');
                 
-                // Trigger estimate
                 setTimeout(() => {
                     debouncedFetchEstimate();
                 }, 100);
@@ -1025,91 +1254,7 @@
     }
 
     /**
-     * Load order breakdown by period
-     */
-    async function loadOrderBreakdownByPeriod() {
-        const container = document.getElementById('woam-order-breakdown');
-        const totalContainer = document.getElementById('woam-order-total');
-        const analysisContainer = document.getElementById('woam-order-analysis');
-        
-        const beforeDate = document.getElementById('woam-before-date').value;
-        if (!beforeDate) {
-            analysisContainer.style.display = 'none';
-            return;
-        }
-        
-        analysisContainer.style.display = 'block';
-        container.innerHTML = '<span class="woam-loading">Loading...</span>';
-        
-        try {
-            const period = calculatePeriodFromDate(beforeDate);
-            const data = await woamPost('hw_woam_get_order_breakdown_by_period', { period: period });
-            
-            let html = '';
-            const statusColors = {
-                'completed': { bg: '#e6f4ea', border: '#2ea64a' },
-                'processing': { bg: '#e6f0fa', border: '#2271b1' },
-                'on-hold': { bg: '#fef9e7', border: '#dba617' },
-                'cancelled': { bg: '#fdf0f0', border: '#d63638' },
-                'refunded': { bg: '#fef9e7', border: '#dba617' },
-                'failed': { bg: '#fdf0f0', border: '#d63638' },
-                'pending': { bg: '#f8f4ff', border: '#7f54b3' },
-            };
-            
-            for (const [status, count] of Object.entries(data.breakdown)) {
-                const color = statusColors[status] || { bg: '#f0f0f1', border: '#646970' };
-                html += `
-                    <div style="background: ${color.bg}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${color.border};">
-                        <strong>${formatNumber(count)}</strong>
-                        <span style="color: #646970;">${status.replace('wc-', '').replace('-', ' ')}</span>
-                    </div>
-                `;
-            }
-            
-            container.innerHTML = html;
-            totalContainer.innerHTML = `<strong>Total eligible orders: ${formatNumber(data.total)}</strong>`;
-            
-        } catch (err) {
-            container.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
-        }
-    }
-
-    /**
-     * Calculate period from date
-     */
-    function calculatePeriodFromDate(date) {
-        const selected = new Date(date);
-        const now = new Date();
-        const diffMonths = (now.getFullYear() - selected.getFullYear()) * 12 + (now.getMonth() - selected.getMonth());
-        
-        if (diffMonths <= 3) return '3 months';
-        if (diffMonths <= 6) return '6 months';
-        if (diffMonths <= 12) return '12 months';
-        if (diffMonths <= 24) return '24 months';
-        return '36 months';
-    }
-
-    /**
-     * Load subscription stats for archive tab
-     */
-    async function loadSubscriptionStatsMini() {
-        if (!document.getElementById('woam-subscription-stats-mini')) return;
-        
-        try {
-            const data = await woamPost('hw_woam_get_subscription_analysis');
-            
-            document.getElementById('woam-subs-protected').textContent = formatNumber(data.protected || 0);
-            document.getElementById('woam-subs-cancelled').textContent = formatNumber(data.cancelled || 0);
-            document.getElementById('woam-subs-expired').textContent = formatNumber(data.expired || 0);
-            document.getElementById('woam-subs-eligible').textContent = formatNumber(data.eligible || 0);
-            
-        } catch (err) {
-            console.error('Failed to load subscription stats:', err);
-        }
-    }
-
-    /**
-     * Enhanced batch loop with progress
+     * Enhanced progress display with ETA and batch info
      */
     async function runBatchLoopEnhanced(opts) {
         const { action, payload, total, progressEl, fillEl, textEl, summaryEl, startBtn, confirmEl } = opts;
@@ -1130,6 +1275,7 @@
 
         const batchSize = parseInt(document.getElementById('woam-batch-size')?.value || '500');
         payload.batch_size = batchSize;
+        const totalBatches = Math.ceil(total / batchSize);
 
         try {
             while (true) {
@@ -1158,14 +1304,21 @@
                     etaStr = etaMinutes > 0 ? `${etaMinutes}m ${etaSecondsRemain}s` : `${etaSecondsRemain}s`;
                 }
                 
-                const totalBatches = Math.ceil(total / batchSize);
-                
                 textEl.innerHTML = `
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
-                        <div><strong>Batch ${batchCount} of ${totalBatches}</strong></div>
-                        <div>${formatNumber(processed)} / ${formatNumber(total)} orders processed</div>
-                        <div style="font-size: 11px; color: #646970;">
-                            ${pct}% complete · Elapsed: ${timeStr} · ETA: ${etaStr}
+                    <div style="display: flex; flex-direction: column; gap: 6px; padding: 8px 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span><strong>Batch ${batchCount} of ${totalBatches}</strong></span>
+                            <span style="font-size: 12px; color: #646970;">${pct}% complete</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
+                            <span>${formatNumber(processed)} / ${formatNumber(total)} orders</span>
+                            <span style="font-size: 12px; color: #646970;">
+                                ${timeStr} · ETA: ${etaStr}
+                            </span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #646970;">
+                            <span>${formatNumber(succeeded)} succeeded</span>
+                            <span style="color: #d63638;">${formatNumber(failed)} failed</span>
                         </div>
                     </div>
                 `;
@@ -1187,7 +1340,7 @@
                         <p><strong>${formatNumber(succeeded)}</strong> succeeded &nbsp;
                         <strong>${formatNumber(failed)}</strong> failed${dryNote}</p>
                         <p style="font-size: 12px; color: #646970; margin-top: 4px;">
-                            Completed in ${finalTime} · ${formatNumber(processed)} orders processed
+                            Completed in ${finalTime} · ${formatNumber(processed)} orders processed · ${batchCount} batches
                         </p>
                     </div>
                 </div>`;
@@ -1204,78 +1357,76 @@
     }
 
     /**
-     * Update start archive handler to use enhanced batch loop
-     */
-    function initArchiveTabEnhanced() {
-        // ... existing initArchiveTab code ...
-        
-        // Replace the start button handler with enhanced version
-        document.getElementById('woam-archive-start').addEventListener('click', async () => {
-            const dryRun = document.getElementById('woam-archive-dry-run').checked;
-            const confirmVal = document.getElementById('woam-archive-confirm').value.trim();
-            const confirmEl = document.getElementById('woam-archive-confirm-group');
-
-            if (!dryRun && confirmVal !== 'ARCHIVE') {
-                alert('Please type ARCHIVE to confirm.');
-                return;
-            }
-
-            const beforeDate = document.getElementById('woam-before-date').value;
-            const statuses = Array.from(
-                document.querySelectorAll('#woam-archive-statuses input:checked')
-            ).map(cb => cb.value);
-
-            await runBatchLoopEnhanced({
-                action: 'hw_woam_archive_batch',
-                payload: { 
-                    before_date: beforeDate, 
-                    statuses, 
-                    dry_run: dryRun ? '1' : ''
-                },
-                total: state.totalOrders,
-                progressEl: document.getElementById('woam-archive-progress'),
-                fillEl: document.getElementById('woam-archive-progress-fill'),
-                textEl: document.getElementById('woam-archive-progress-text'),
-                summaryEl: document.getElementById('woam-archive-summary'),
-                startBtn: document.getElementById('woam-archive-start'),
-                confirmEl: confirmEl,
-            });
-        });
-    }
-
-    /**
      * Wires up all interactivity for Tab 2 — Archive Orders
-     * Phase 3: Added real-time estimation and bulk selectors
      */
     function initArchiveTab() {
         const container = document.querySelector('.woam-steps[data-mode="archive"]');
         if (!container) return;
 
-        // Phase 3: Enhanced preset buttons with real-time estimate
-        enhancePresetButtons();
+        // Enhanced preset buttons with range support
+        enhancePresetButtonsRange();
 
-        // Phase 3: Initialize real-time estimate listeners
+        // Initialize real-time estimate listeners
         initRealTimeEstimate();
 
-        // Phase 3: Initialize bulk selectors
+        // Initialize bulk selectors
         initBulkSelectors();
 
-        // Phase 3: Apply recommendation from Overview tab
+        // Apply recommendation from Overview tab
         applyRecommendationFromStorage();
 
-        // Step 1 → Step 2: load savings estimate (full detailed view)
+        // Auto-load analysis on date/status change
+        const fromDateInput = document.getElementById('woam-date-from');
+        const toDateInput = document.getElementById('woam-date-to');
+        
+        if (fromDateInput && toDateInput) {
+            fromDateInput.addEventListener('change', loadArchiveAnalysisRange);
+            toDateInput.addEventListener('change', loadArchiveAnalysisRange);
+        }
+        
+        document.querySelectorAll('#woam-archive-statuses input').forEach(cb => {
+            cb.addEventListener('change', function() {
+                const fromDate = document.getElementById('woam-date-from');
+                const toDate = document.getElementById('woam-date-to');
+                if (fromDate && fromDate.value && toDate && toDate.value) {
+                    loadArchiveAnalysisRange();
+                }
+            });
+        });
+
+        document.querySelectorAll('#woam-subscription-statuses input').forEach(cb => {
+            cb.addEventListener('change', function() {
+                const fromDate = document.getElementById('woam-date-from');
+                const toDate = document.getElementById('woam-date-to');
+                if (fromDate && fromDate.value && toDate && toDate.value) {
+                    loadArchiveAnalysisRange();
+                }
+            });
+        });
+
+        // Step 1 → Step 2: load savings estimate
         document.getElementById('woam-archive-step1-next').addEventListener('click', async () => {
-            const beforeDate = document.getElementById('woam-before-date').value;
+            const fromDate = document.getElementById('woam-date-from')?.value;
+            const toDate = document.getElementById('woam-date-to')?.value;
+            
             const statuses = Array.from(
                 container.querySelectorAll('#woam-archive-statuses input:checked')
             ).map(cb => cb.value);
 
-            if (!beforeDate) {
-                alert('Please select a date before continuing.');
+            const subscriptionStatuses = document.querySelector('.woam-section--subscription') 
+                ? Array.from(
+                    document.querySelectorAll('#woam-subscription-statuses input:checked')
+                ).map(cb => cb.value)
+                : [];
+
+            const allStatuses = [...statuses, ...subscriptionStatuses];
+
+            if (!fromDate || !toDate) {
+                alert('Please select a date range before continuing.');
                 return;
             }
 
-            if (!statuses.length) {
+            if (!allStatuses.length) {
                 alert('Please select at least one order status.');
                 return;
             }
@@ -1288,8 +1439,9 @@
 
             try {
                 const data = await woamPost('hw_woam_get_savings_estimate', {
-                    before_date: beforeDate,
-                    statuses,
+                    from_date: fromDate,
+                    before_date: toDate,
+                    statuses: allStatuses,
                 });
 
                 if (data.order_count === 0) {
@@ -1298,7 +1450,6 @@
                     return;
                 }
 
-                // Cache total for progress bar.
                 state.totalOrders = data.order_count;
 
                 impactEl.classList.remove('woam-loading');
@@ -1351,27 +1502,42 @@
         document.getElementById('woam-archive-start').addEventListener('click', async () => {
             const dryRun = document.getElementById('woam-archive-dry-run').checked;
             const confirmVal = document.getElementById('woam-archive-confirm').value.trim();
+            const confirmEl = document.getElementById('woam-archive-confirm-group');
 
-            // Confirmation gate — skip for dry runs.
             if (!dryRun && confirmVal !== 'ARCHIVE') {
                 alert('Please type ARCHIVE to confirm.');
                 return;
             }
 
-            const beforeDate = document.getElementById('woam-before-date').value;
+            const fromDate = document.getElementById('woam-date-from')?.value;
+            const toDate = document.getElementById('woam-date-to')?.value;
+            
             const statuses = Array.from(
                 container.querySelectorAll('#woam-archive-statuses input:checked')
             ).map(cb => cb.value);
 
-            await runBatchLoop({
+            const subscriptionStatuses = document.querySelector('.woam-section--subscription') 
+                ? Array.from(
+                    document.querySelectorAll('#woam-subscription-statuses input:checked')
+                ).map(cb => cb.value)
+                : [];
+
+            const allStatuses = [...statuses, ...subscriptionStatuses];
+
+            await runBatchLoopEnhanced({
                 action: 'hw_woam_archive_batch',
-                payload: { before_date: beforeDate, statuses, dry_run: dryRun ? '1' : '' },
+                payload: { 
+                    before_date: toDate, 
+                    statuses: allStatuses, 
+                    dry_run: dryRun ? '1' : ''
+                },
                 total: state.totalOrders,
                 progressEl: document.getElementById('woam-archive-progress'),
                 fillEl: document.getElementById('woam-archive-progress-fill'),
                 textEl: document.getElementById('woam-archive-progress-text'),
                 summaryEl: document.getElementById('woam-archive-summary'),
                 startBtn: document.getElementById('woam-archive-start'),
+                confirmEl: confirmEl,
             });
         });
     }
@@ -1406,7 +1572,6 @@
                 totalRevenueEl.textContent = data.archived_revenue_formatted;
             }
             
-            // Get last archive date from recent activity
             if (lastArchiveEl) {
                 const activityData = await woamPost('hw_woam_get_recent_activity');
                 const lastArchive = activityData.activity.find(a => a.action === 'archive');
@@ -1427,23 +1592,20 @@
      */
     async function loadConfidenceSection() {
         try {
-            // Get integrity data
             const integrityData = await woamPost('hw_woam_run_integrity_check');
             const lifetimeData = await woamPost('hw_woam_get_lifetime_stats');
             
-            // Update integrity status
             const integrityStatus = document.getElementById('woam-confidence-integrity');
             if (integrityStatus) {
                 if (integrityData.total_orphans === 0) {
-                    integrityStatus.innerHTML = '<span class="woam-confidence-status--ok">✓ Healthy</span>';
+                    integrityStatus.innerHTML = '<span class="woam-confidence-status--ok">Healthy</span>';
                     integrityStatus.className = 'woam-confidence-status woam-confidence-status--ok';
                 } else {
-                    integrityStatus.innerHTML = `<span class="woam-confidence-status--warn">⚠ ${integrityData.total_orphans} orphaned records</span>`;
+                    integrityStatus.innerHTML = `<span class="woam-confidence-status--warn">${integrityData.total_orphans} orphaned records</span>`;
                     integrityStatus.className = 'woam-confidence-status woam-confidence-status--warn';
                 }
             }
             
-            // Update restore success rate
             const restoreRate = document.getElementById('woam-confidence-rate');
             if (restoreRate) {
                 const rate = lifetimeData.restore_success_rate;
@@ -1462,19 +1624,17 @@
                 }
             }
             
-            // Update verification status
             const verifyStatus = document.getElementById('woam-confidence-verify');
             if (verifyStatus) {
                 if (integrityData.is_healthy) {
-                    verifyStatus.innerHTML = '<span class="woam-confidence-status--ok">✓ Fully Verified</span>';
+                    verifyStatus.innerHTML = '<span class="woam-confidence-status--ok">Fully Verified</span>';
                     verifyStatus.className = 'woam-confidence-status woam-confidence-status--ok';
                 } else {
-                    verifyStatus.innerHTML = '<span class="woam-confidence-status--warn">⚠ Needs Attention</span>';
+                    verifyStatus.innerHTML = '<span class="woam-confidence-status--warn">Needs Attention</span>';
                     verifyStatus.className = 'woam-confidence-status woam-confidence-status--warn';
                 }
             }
             
-            // Update last scan date
             const lastScan = document.getElementById('woam-confidence-last-scan');
             if (lastScan) {
                 const scanHistory = getScanHistoryFromStorage();
@@ -1505,7 +1665,6 @@
             date: new Date().toISOString(),
             result: scanResult
         });
-        // Keep only last 10 scans
         if (history.length > 10) history.pop();
         localStorage.setItem('woam_scan_history', JSON.stringify(history));
     }
@@ -1561,11 +1720,8 @@
         try {
             const data = await woamPost('hw_woam_run_integrity_check');
             
-            // Save to history
             saveScanHistory(data);
             renderScanHistory();
-            
-            // Update confidence section
             await loadConfidenceSection();
             
             if (data.is_healthy) {
@@ -1574,11 +1730,10 @@
                         <span class="dashicons dashicons-yes-alt"></span>
                         <div>
                             <strong>Archive Health Check Passed</strong>
-                            <p>All ${formatNumber(data.total_orphans === 0 ? 'archive' : '')} records are intact. No issues found.</p>
+                            <p>All archive records are intact. No issues found.</p>
                         </div>
                     </div>`;
                 
-                // Show fix button? No, but could offer optimization
                 const fixBtn = document.getElementById('woam-fix-orphans');
                 if (fixBtn) fixBtn.style.display = 'none';
                 
@@ -1602,11 +1757,9 @@
                         </div>
                     </div>`;
                 
-                // Show fix button and attach handler
                 const fixBtn = resultEl.querySelector('[data-fix-orphans]');
                 if (fixBtn) {
                     fixBtn.addEventListener('click', () => {
-                        // This would call a new endpoint to clean orphans
                         alert('Orphan fixing will be available in a future update.');
                     });
                 }
@@ -1650,31 +1803,6 @@
     }
 
     /**
-     * Loads the Archive Vault contents and statistics
-     * Phase 4: Enhanced with vault statistics and confidence section
-     */
-    async function loadArchivedTab() {
-        const inventoryEl = document.getElementById('woam-archive-inventory');
-        const statusEl = document.getElementById('woam-archived-statuses');
-
-        // Load all vault components in parallel
-        await Promise.allSettled([
-            loadVaultStatistics(),
-            loadConfidenceSection(),
-            (async () => {
-                try {
-                    const data = await woamPost('hw_woam_get_archive_breakdown');
-                    renderArchiveInventory(inventoryEl, data);
-                    renderArchivedStatusCheckboxes(statusEl, data);
-                    renderScanHistory();
-                } catch (err) {
-                    if (inventoryEl) showError(inventoryEl, err.message);
-                }
-            })()
-        ]);
-    }
-
-    /**
      * Renders the archive inventory table
      */
     function renderArchiveInventory(el, data) {
@@ -1703,7 +1831,7 @@
                         <span class="woam-status-badge woam-status-badge--${escHtml(row.status)}">
                             ${escHtml(row.label)}
                         </span>
-                    </span>
+                    </td>
                     <td><strong>${formatNumber(row.order_count)}</strong></td>
                 </tr>`;
         });
@@ -1712,8 +1840,8 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td><strong>Total</strong></span>
-                        <td><strong>${formatNumber(data.total_count)}</strong></span>
+                        <td><strong>Total</strong></td>
+                        <td><strong>${formatNumber(data.total_count)}</strong></td>
                     </tr>
                 </tfoot>
             </table>`;
@@ -1749,13 +1877,35 @@
     }
 
     /**
+     * Loads the Archive Vault contents and statistics
+     */
+    async function loadArchivedTab() {
+        const inventoryEl = document.getElementById('woam-archive-inventory');
+        const statusEl = document.getElementById('woam-archived-statuses');
+
+        await Promise.allSettled([
+            loadVaultStatistics(),
+            loadConfidenceSection(),
+            (async () => {
+                try {
+                    const data = await woamPost('hw_woam_get_archive_breakdown');
+                    renderArchiveInventory(inventoryEl, data);
+                    renderArchivedStatusCheckboxes(statusEl, data);
+                    renderScanHistory();
+                } catch (err) {
+                    if (inventoryEl) showError(inventoryEl, err.message);
+                }
+            })()
+        ]);
+    }
+
+    /**
      * Wires up all interactivity for Tab 3 — Archived Orders
      */
     function initArchivedTab() {
         const container = document.querySelector('.woam-steps[data-mode="archived"]');
         if (!container) return;
 
-        // Radio change handlers
         container.querySelectorAll('input[name="archived_action"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 const isDelete = radio.value === 'delete';
@@ -1779,7 +1929,6 @@
             });
         });
 
-        // Step 1 → Step 2
         document.getElementById('woam-archived-step1-next').addEventListener('click', async () => {
             const action = container.querySelector('input[name="archived_action"]:checked')?.value ?? 'restore';
             const statuses = Array.from(
@@ -1826,19 +1975,16 @@
             }
         });
 
-        // Step 2 → Step 3
         document.getElementById('woam-archived-step2-next').addEventListener('click', () => {
             setStep(container, 3);
         });
 
-        // Back buttons
         container.querySelectorAll('[data-step-back]').forEach(btn => {
             btn.addEventListener('click', () => {
                 setStep(container, parseInt(btn.dataset.stepBack));
             });
         });
 
-        // Start button
         document.getElementById('woam-archived-start').addEventListener('click', async () => {
             const action = container.querySelector('input[name="archived_action"]:checked')?.value ?? 'restore';
             const dryRun = document.getElementById('woam-archived-dry-run').checked;
@@ -1858,7 +2004,7 @@
                 ? 'hw_woam_delete_batch'
                 : 'hw_woam_restore_batch';
 
-            await runBatchLoop({
+            await runBatchLoopEnhanced({
                 action: ajaxAction,
                 payload: { statuses, dry_run: dryRun ? '1' : '' },
                 total: state.totalOrders,
@@ -1867,12 +2013,12 @@
                 textEl: document.getElementById('woam-archived-progress-text'),
                 summaryEl: document.getElementById('woam-archived-summary'),
                 startBtn: document.getElementById('woam-archived-start'),
+                confirmEl: null,
             });
 
             await loadArchivedTab();
         });
 
-        // Enhanced Integrity Check button (Phase 4)
         const integrityBtn = document.getElementById('woam-run-integrity-check');
         if (integrityBtn) {
             integrityBtn.addEventListener('click', async () => {
@@ -1885,7 +2031,7 @@
 
     /**
      * ============================================================
-     * BATCH PROCESSING (Original)
+     * BATCH PROCESSING
      * ============================================================
      */
 
@@ -2001,6 +2147,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         initTabs();
         initHeroButtons();
+        initDateRangePicker();
         loadOverviewTab();
         initArchiveTab();
         initArchivedTab();

@@ -61,7 +61,7 @@ class ArchiveHandler {
 		$this->wpdb       = $wpdb;
 		$this->tables     = $tables;
 		$this->logger     = $logger;
-		$this->batch_size = (int) apply_filters( 'hw_woam_batch_size', 50 );
+		$this->batch_size = (int) apply_filters( 'hw_woam_batch_size', 500 );
 	}
 
 	/**

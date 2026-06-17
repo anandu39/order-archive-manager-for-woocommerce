@@ -48,6 +48,13 @@ class AjaxHandler {
 	private AnalyticsHandler $analytics_handler;
 
 	/**
+	 * WordPress database object.
+	 *
+	 * @var \wpdb
+	 */
+	private \wpdb $wpdb;
+
+	/**
 	 * Transient key used to prevent concurrent batch jobs.
 	 */
 	private const LOCK_KEY = 'hw_woam_job_running';
@@ -71,10 +78,12 @@ class AjaxHandler {
 		DeleteHandler $delete_handler,
 		AnalyticsHandler $analytics_handler
 	) {
+		global $wpdb;
 		$this->archive_handler   = $archive_handler;
 		$this->restore_handler   = $restore_handler;
 		$this->delete_handler    = $delete_handler;
 		$this->analytics_handler = $analytics_handler;
+		$this->wpdb              = $wpdb;
 	}
 
 	/**
@@ -95,6 +104,9 @@ class AjaxHandler {
 		add_action( 'wp_ajax_hw_woam_get_archive_breakdown', array( $this, 'handle_get_archive_breakdown' ) );
 		add_action( 'wp_ajax_hw_woam_run_integrity_check', array( $this, 'handle_run_integrity_check' ) );
 		add_action( 'wp_ajax_hw_woam_get_subscription_stats', array( $this, 'handle_get_subscription_stats' ) );
+		add_action( 'wp_ajax_hw_woam_get_oldest_order_date', array( $this, 'handle_get_oldest_order_date' ) );
+		add_action( 'wp_ajax_hw_woam_preview_general_orders_range', array( $this, 'handle_preview_general_orders_range' ) );
+		add_action( 'wp_ajax_hw_woam_preview_subscription_orders_range', array( $this, 'handle_preview_subscription_orders_range' ) );
 
 		// New analytics hooks.
 		add_action( 'wp_ajax_hw_woam_get_health_score', array( $this, 'handle_get_health_score' ) );
@@ -283,12 +295,11 @@ class AjaxHandler {
 	 * @return void
 	 */
 	public function handle_archive_batch(): void {
-
 		$this->verify_request();
 		$this->acquire_lock();
 
 		try {
-            // phpcs:disable WordPress.Security.NonceVerification.Missing
+			// phpcs:disable WordPress.Security.NonceVerification.Missing
 			$before_date = sanitize_text_field( wp_unslash( $_POST['before_date'] ?? '' ) );
 
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
@@ -296,9 +307,12 @@ class AjaxHandler {
 				: array();
 
 			$dry_run = ! empty( $_POST['dry_run'] );
-            // phpcs:disable WordPress.Security.NonceVerification.Missing
+			
+			// Get batch size from request - FIXED: passed correctly
+			$batch_size = isset( $_POST['batch_size'] ) ? (int) $_POST['batch_size'] : 0;
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
 
-			$result = $this->archive_handler->process_batch( $before_date, $statuses, $dry_run );
+			$result = $this->archive_handler->process_batch( $before_date, $statuses, $dry_run, $batch_size );
 
 		} finally {
 			$this->release_lock();
@@ -492,6 +506,7 @@ class AjaxHandler {
 
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
 		$before_date = sanitize_text_field( wp_unslash( $_POST['before_date'] ?? '' ) );
+		$from_date   = sanitize_text_field( wp_unslash( $_POST['from_date'] ?? '' ) );
 
 		$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 			? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
@@ -518,95 +533,102 @@ class AjaxHandler {
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
 		// ---------------------------------------------------------------------
-		// Step 1 — count matching orders.
-		// ---------------------------------------------------------------------
-		$query_orders = "SELECT COUNT(*) FROM %i 
+        // Step 1 — count matching orders.
+        // ---------------------------------------------------------------------
+        // Base condition for Step 1 (No table alias)
+        $date_condition = $from_date ? 'AND post_date >= %s AND post_date < %s' : 'AND post_date < %s';
+        
+        // Aliased condition for Step 2 Joins (Uses p.post_date)
+        $aliased_date_condition = $from_date ? 'AND p.post_date >= %s AND p.post_date < %s' : 'AND p.post_date < %s';
+
+        $query_orders = "SELECT COUNT(*) FROM %i 
                         WHERE post_type = 'shop_order' 
-                        AND post_date < %s 
+                        {$date_condition}
                         AND post_status IN ({$in_placeholders})";
 
-		$order_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				$query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				array_merge( array( $wpdb->posts, $before_date ), $statuses )
-			)
-		);
+        $date_args    = $from_date ? array( $from_date . ' 00:00:00', $before_date . ' 23:59:59' ) : array( $before_date );
+        $order_count  = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                $query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+                array_merge( array( $wpdb->posts ), $date_args, $statuses )
+            )
+        );
 
-		if ( 0 === $order_count ) {
-			wp_send_json_success(
-				array(
-					'order_count'     => 0,
-					'row_counts'      => array(),
-					'estimated_bytes' => 0,
-					'estimated_size'  => '0 B',
-				)
-			);
-			return;
-		}
+        if ( 0 === $order_count ) {
+            wp_send_json_success(
+                array(
+                    'order_count'     => 0,
+                    'row_counts'      => array(),
+                    'estimated_bytes' => 0,
+                    'estimated_size'  => '0 B',
+                )
+            );
+            return;
+        }
 
-		// ---------------------------------------------------------------------
-		// Step 2 — count related rows across all six tables.
-		// ---------------------------------------------------------------------
+        // ---------------------------------------------------------------------
+        // Step 2 — count related rows across all six tables.
+        // ---------------------------------------------------------------------
 
-		// Fix for Meta Rows.
-		$query_meta = "SELECT COUNT(*) FROM %i pm
+        // Fix for Meta Rows.
+        $query_meta = "SELECT COUNT(*) FROM %i pm
                       INNER JOIN %i p ON pm.post_id = p.ID
                       WHERE p.post_type = 'shop_order'
-                      AND p.post_date < %s
+                      {$aliased_date_condition}
                       AND p.post_status IN ({$in_placeholders})";
 
-		$meta_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				$query_meta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				array_merge( array( $wpdb->postmeta, $wpdb->posts, $before_date ), $statuses )
-			)
-		);
+        $meta_count = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                $query_meta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+                array_merge( array( $wpdb->postmeta, $wpdb->posts ), $date_args, $statuses )
+            )
+        );
 
-		// Fix for Order Items Rows.
-		$query_items = "SELECT COUNT(*) FROM %i oi
+        // Fix for Order Items Rows.
+        $query_items = "SELECT COUNT(*) FROM %i oi
                        INNER JOIN %i p ON oi.order_id = p.ID
                        WHERE p.post_type = 'shop_order'
-                       AND p.post_date < %s
+                       {$aliased_date_condition}
                        AND p.post_status IN ({$in_placeholders})";
 
-		$items_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				$query_items, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				array_merge( array( $order_items_table, $wpdb->posts, $before_date ), $statuses )
-			)
-		);
+        $items_count = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                $query_items, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+                array_merge( array( $order_items_table, $wpdb->posts ), $date_args, $statuses )
+            )
+        );
 
-		// Fix for Order Item Meta Rows.
-		$query_itemmeta = "SELECT COUNT(*) FROM %i oim
+        // Fix for Order Item Meta Rows.
+        $query_itemmeta = "SELECT COUNT(*) FROM %i oim
                           INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
                           INNER JOIN %i p ON oi.order_id = p.ID
                           WHERE p.post_type = 'shop_order'
-                          AND p.post_date < %s
+                          {$aliased_date_condition}
                           AND p.post_status IN ({$in_placeholders})";
 
-		$itemmeta_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				$query_itemmeta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				array_merge( array( $order_items_meta_table, $order_items_table, $wpdb->posts, $before_date ), $statuses )
-			)
-		);
+        $itemmeta_count = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                $query_itemmeta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+                array_merge( array( $order_items_meta_table, $order_items_table, $wpdb->posts ), $date_args, $statuses )
+            )
+        );
 
-		// Fix for Order Notes/Comments Rows.
-		$query_notes = "SELECT COUNT(*) FROM %i
+        // Fix for Order Notes/Comments Rows.
+        $query_notes = "SELECT COUNT(*) FROM %i
                        WHERE comment_post_ID IN (
-                           SELECT ID FROM %i
-                           WHERE post_type = 'shop_order'
-                           AND post_date < %s
-                           AND post_status IN ({$in_placeholders})
+                           SELECT ID FROM %i p
+                           WHERE p.post_type = 'shop_order'
+                           {$aliased_date_condition}
+                           AND p.post_status IN ({$in_placeholders})
                        )
                        AND comment_type IN ('order_note', 'order_note_private')";
 
-		$notes_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				$query_notes, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				array_merge( array( $wpdb->comments, $wpdb->posts, $before_date ), $statuses )
-			)
-		);
+        $notes_count = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                $query_notes, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+                array_merge( array( $wpdb->comments, $wpdb->posts ), $date_args, $statuses )
+            )
+        );
 
 		$row_counts = array(
 			'orders'      => $order_count,
@@ -662,6 +684,199 @@ class AjaxHandler {
 				'estimated_size'  => $this->format_bytes( $estimated_bytes ),
 			)
 		);
+	}
+
+	/**
+	 * Handle get oldest order date request.
+	 *
+	 * @return void
+	 */
+	public function handle_get_oldest_order_date(): void {
+		$this->verify_request();
+		
+		global $wpdb;
+		
+		$oldest_date = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT MIN(post_date) FROM %i WHERE post_type = 'shop_order'",
+				$wpdb->posts
+			)
+		);
+		
+		if ($oldest_date) {
+			$date = new DateTime($oldest_date);
+			wp_send_json_success(array(
+				'oldest_date' => $date->format('Y-m-d'),
+				'oldest_date_formatted' => date_i18n(get_option('date_format'), strtotime($oldest_date)),
+			));
+		} else {
+			wp_send_json_success(array(
+				'oldest_date' => null,
+				'oldest_date_formatted' => null,
+			));
+		}
+	}
+
+	/**
+	 * Handle preview general orders with date range.
+	 *
+	 * @return void
+	 */
+	public function handle_preview_general_orders_range(): void {
+		$this->verify_request();
+		
+		$from_date = isset( $_POST['from_date'] ) 
+			? sanitize_text_field( wp_unslash( $_POST['from_date'] ) )
+			: '';
+		$to_date = isset( $_POST['to_date'] ) 
+			? sanitize_text_field( wp_unslash( $_POST['to_date'] ) )
+			: '';
+		
+		if ( empty( $from_date ) || empty( $to_date ) ) {
+			wp_send_json_error( array( 'message' => 'Please select a date range' ) );
+			return;
+		}
+		
+		$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
+			? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
+			: array();
+		
+		global $wpdb;
+		
+		$from_datetime = $from_date . ' 00:00:00';
+		$to_datetime = $to_date . ' 23:59:59';
+		
+		if ( empty( $statuses ) ) {
+			wp_send_json_success( array(
+				'breakdown' => array(),
+				'total' => 0,
+				'eligible' => 0,
+				'estimated_savings' => 0,
+				'estimated_savings_formatted' => '0 B',
+			) );
+			return;
+		}
+		
+		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT post_status, COUNT(*) as count 
+				FROM %i 
+				WHERE post_type = 'shop_order' 
+				AND post_date >= %s
+				AND post_date <= %s
+				AND post_status IN ({$placeholders})
+				GROUP BY post_status
+				ORDER BY count DESC",
+				array_merge( array( $wpdb->posts, $from_datetime, $to_datetime ), $statuses )
+			)
+		);
+		
+		$breakdown = array();
+		$total = 0;
+		$eligible = 0;
+		$eligible_statuses = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' );
+		
+		foreach ( $results as $row ) {
+			$breakdown[ $row->post_status ] = (int) $row->count;
+			$total += (int) $row->count;
+			if ( in_array( $row->post_status, $eligible_statuses, true ) ) {
+				$eligible += (int) $row->count;
+			}
+		}
+		
+		// Calculate estimated savings
+		$avg_order_size = $this->get_average_order_size_bytes();
+		$estimated_savings = $eligible * $avg_order_size;
+		
+		wp_send_json_success( array(
+			'breakdown' => $breakdown,
+			'total' => $total,
+			'eligible' => $eligible,
+			'estimated_savings' => $estimated_savings,
+			'estimated_savings_formatted' => $this->format_bytes( $estimated_savings ),
+		));
+	}
+
+	/**
+	 * Handle preview subscription orders with date range.
+	 *
+	 * @return void
+	 */
+	public function handle_preview_subscription_orders_range(): void {
+		$this->verify_request();
+		
+		$from_date = isset( $_POST['from_date'] ) 
+			? sanitize_text_field( wp_unslash( $_POST['from_date'] ) )
+			: '';
+		$to_date = isset( $_POST['to_date'] ) 
+			? sanitize_text_field( wp_unslash( $_POST['to_date'] ) )
+			: '';
+		
+		if ( empty( $from_date ) || empty( $to_date ) ) {
+			wp_send_json_error( array( 'message' => 'Please select a date range' ) );
+			return;
+		}
+		
+		global $wpdb;
+		
+		if ( ! class_exists( 'WC_Subscriptions' ) ) {
+			wp_send_json_success( array(
+				'subscriptions_active' => false,
+				'message' => 'WooCommerce Subscriptions is not active',
+			) );
+			return;
+		}
+		
+		$from_datetime = $from_date . ' 00:00:00';
+		$to_datetime = $to_date . ' 23:59:59';
+		
+		// Get subscription stats for the period
+		$statuses = array( 'wc-active', 'wc-pending-cancel', 'wc-on-hold', 'wc-cancelled', 'wc-expired', 'wc-failed' );
+		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT s.post_status, COUNT(DISTINCT p.ID) as count 
+				FROM %i p
+				INNER JOIN %i s ON s.post_parent = p.ID
+				WHERE p.post_type = 'shop_order'
+				AND s.post_type = 'shop_subscription'
+				AND p.post_date >= %s
+				AND p.post_date <= %s
+				AND s.post_status IN ({$placeholders})
+				GROUP BY s.post_status",
+				array_merge( array( $wpdb->posts, $wpdb->posts, $from_datetime, $to_datetime ), $statuses )
+			)
+		);
+		
+		$breakdown = array();
+		$total = 0;
+		$eligible = 0;
+		$protected = 0;
+		$protected_statuses = array( 'wc-active', 'wc-pending-cancel', 'wc-on-hold' );
+		$eligible_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed' );
+		
+		foreach ( $results as $row ) {
+			$status = str_replace( 'wc-', '', $row->post_status );
+			$breakdown[ $status ] = (int) $row->count;
+			$total += (int) $row->count;
+			
+			if ( in_array( $row->post_status, $protected_statuses, true ) ) {
+				$protected += (int) $row->count;
+			} elseif ( in_array( $row->post_status, $eligible_statuses, true ) ) {
+				$eligible += (int) $row->count;
+			}
+		}
+		
+		wp_send_json_success( array(
+			'breakdown' => $breakdown,
+			'total' => $total,
+			'eligible' => $eligible,
+			'protected' => $protected,
+			'subscriptions_active' => true,
+		));
 	}
 
 	/**
@@ -987,7 +1202,7 @@ class AjaxHandler {
 			wp_send_json_success( $data );
 			
 		} catch ( \Exception $e ) {
-			ErrorHandler::log( 'Subscription analysis failed', array( 'error' => $e->getMessage() ) );
+			error_log( 'WOAM Subscription analysis failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to load subscription data.', 'woo-order-archive-manager' ) ) );
 		}
 	}
@@ -1055,7 +1270,7 @@ class AjaxHandler {
 			));
 			
 		} catch ( \Exception $e ) {
-			ErrorHandler::log( 'Archive preview failed', array( 'error' => $e->getMessage() ) );
+			error_log( 'WOAM Archive preview failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to generate archive preview.', 'woo-order-archive-manager' ) ) );
 		}
 	}
@@ -1087,7 +1302,7 @@ class AjaxHandler {
 			));
 			
 		} catch ( \Exception $e ) {
-			ErrorHandler::log( 'Benchmark failed', array( 'error' => $e->getMessage() ) );
+			error_log( 'WOAM Benchmark failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to run benchmark.', 'woo-order-archive-manager' ) ) );
 		}
 	}
@@ -1107,7 +1322,7 @@ class AjaxHandler {
 			wp_send_json_success( $comparison );
 			
 		} catch ( \Exception $e ) {
-			ErrorHandler::log( 'Benchmark comparison failed', array( 'error' => $e->getMessage() ) );
+			error_log( 'WOAM Benchmark comparison failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to load benchmark comparison.', 'woo-order-archive-manager' ) ) );
 		}
 	}
@@ -1161,7 +1376,7 @@ class AjaxHandler {
 			));
 			
 		} catch ( \Exception $e ) {
-			ErrorHandler::log( 'Order breakdown failed', array( 'error' => $e->getMessage() ) );
+			error_log( 'WOAM Order breakdown failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to load order breakdown.', 'woo-order-archive-manager' ) ) );
 		}
 	}
@@ -1258,5 +1473,37 @@ class AjaxHandler {
 				'orphaned_note_meta' => $orphaned_note_meta,
 			)
 		);
+	}
+
+	/**
+	 * Returns an estimated average order size in bytes.
+	 * Queries information_schema for the combined average row size
+	 * across posts, postmeta, order_items, and order_itemmeta.
+	 *
+	 * @return int Estimated bytes per order.
+	 */
+	private function get_average_order_size_bytes(): int {
+		$tables = array(
+			$this->wpdb->posts,
+			$this->wpdb->postmeta,
+			$this->wpdb->prefix . 'woocommerce_order_items',
+			$this->wpdb->prefix . 'woocommerce_order_itemmeta',
+		);
+
+		$placeholders = implode( ', ', array_fill( 0, count( $tables ), '%s' ) );
+
+		$avg = (float) $this->wpdb->get_var(
+			$this->wpdb->prepare(
+				"SELECT ROUND( SUM( DATA_LENGTH + INDEX_LENGTH ) / SUM( TABLE_ROWS ), 2 )
+				FROM information_schema.TABLES
+				WHERE TABLE_SCHEMA = DATABASE()
+				AND TABLE_NAME IN ({$placeholders})
+				AND TABLE_ROWS > 0",
+				$tables
+			)
+		);
+
+		// Fallback to 50 KB if information_schema returns nothing.
+		return $avg > 0 ? (int) $avg : 51200;
 	}
 }
