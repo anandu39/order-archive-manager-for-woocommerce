@@ -247,7 +247,7 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
                 <?php esc_html_e( 'Back', 'woo-order-archive-manager' ); ?>
             </button>
             <button type="button" class="woam-button woam-button--primary" id="woam-archive-step2-next">
-                <?php esc_html_e_(
+                <?php esc_html_e(
                     'Continue',
                     'woo-order-archive-manager'
                 ); ?>

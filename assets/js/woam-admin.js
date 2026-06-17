@@ -76,37 +76,38 @@
         if (!banner) return;
         
         try {
-            // Get database stats
-            const dbStats = await woamPost('hw_woam_get_db_stats');
-            const totalBytes = dbStats.total_bytes || 0;
-            const totalFormatted = dbStats.total_formatted || '0 B';
-            
-            // Get order count
-            const orderData = await woamPost('hw_woam_get_archive_breakdown');
-            const totalArchived = orderData.total_count || 0;
-            
-            // Get total orders
-            const totalOrdersData = await woamPost('hw_woam_get_count', {
-                mode: 'archive',
-                before_date: '2099-01-01',
-                statuses: ['wc-completed', 'wc-processing', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed']
-            });
-            const totalOrders = totalOrdersData.count || 0;
-            
-            // Calculate eligible orders (completed/cancelled/refunded/failed older than 12 months)
-            let eligibleOrders = 0;
-            if (totalOrders > 0) {
-                const twelveMonthsAgo = new Date();
-                twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-                const dateStr = twelveMonthsAgo.toISOString().split('T')[0];
-                
-                const eligibleData = await woamPost('hw_woam_get_count', {
+            // Pre-compute the 12-months-ago date up front since it doesn't
+            // depend on any network response.
+            const twelveMonthsAgo = new Date();
+            twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+            const dateStr = twelveMonthsAgo.toISOString().split('T')[0];
+
+            // None of these four calls depend on each other's results, so
+            // fire them all in parallel instead of awaiting one at a time.
+            // This cuts banner load time down to the slowest single request
+            // instead of the sum of all four.
+            const [dbStats, orderData, totalOrdersData, eligibleData] = await Promise.all([
+                woamPost('hw_woam_get_db_stats'),
+                woamPost('hw_woam_get_archive_breakdown'),
+                woamPost('hw_woam_get_count', {
+                    mode: 'archive',
+                    before_date: '2099-01-01',
+                    statuses: ['wc-completed', 'wc-processing', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed']
+                }),
+                woamPost('hw_woam_get_count', {
                     mode: 'archive',
                     before_date: dateStr,
                     statuses: ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
-                });
-                eligibleOrders = eligibleData.count || 0;
-            }
+                }),
+            ]);
+
+            const totalBytes = dbStats.total_bytes || 0;
+            const totalFormatted = dbStats.total_formatted || '0 B';
+            const totalArchived = orderData.total_count || 0;
+            const totalOrders = totalOrdersData.count || 0;
+
+            // Calculate eligible orders (completed/cancelled/refunded/failed older than 12 months)
+            const eligibleOrders = totalOrders > 0 ? (eligibleData.count || 0) : 0;
             
             // Calculate estimated savings (eligible orders * average size)
             const avgOrderSize = totalBytes > 0 && totalOrders > 0 ? totalBytes / totalOrders : 50 * 1024;
@@ -153,9 +154,11 @@
             
             if (showCta && eligibleOrders > 0) {
                 ctaBtn.style.display = 'inline-flex';
-                ctaBtn.addEventListener('click', () => {
+                // Use onclick (not addEventListener) so repeated banner reloads
+                // replace the handler instead of stacking duplicate listeners.
+                ctaBtn.onclick = () => {
                     document.querySelector('.woam-tab[data-tab="archive"]')?.click();
-                });
+                };
             } else {
                 ctaBtn.style.display = 'none';
             }
@@ -1998,7 +2001,6 @@
     document.addEventListener('DOMContentLoaded', () => {
         initTabs();
         initHeroButtons();
-        loadOpportunityBanner();
         loadOverviewTab();
         initArchiveTab();
         initArchivedTab();

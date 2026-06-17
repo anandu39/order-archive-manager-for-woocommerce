@@ -75,15 +75,17 @@ defined( 'ABSPATH' ) || exit;
 	</div>
 </div>
 
-<!-- Subscription Overview Card -->
-<div class="woam-card woam-card--subscriptions">
-    <h2>
-        <span class="dashicons dashicons-cart"></span>
-        <?php esc_html_e( 'Subscription Overview', 'woo-order-archive-manager' ); ?>
-    </h2>
-    <div id="woam-subscription-stats" class="woam-loading">
-        <?php esc_html_e( 'Loading subscription data...', 'woo-order-archive-manager' ); ?>
-    </div>
+<!-- Subscription Overview Card - NOW IN ITS OWN ROW (FIXED) -->
+<div class="woam-grid woam-grid--1col">
+	<div class="woam-card woam-card--subscriptions">
+		<h2>
+			<span class="dashicons dashicons-cart"></span>
+			<?php esc_html_e( 'Subscription Overview', 'woo-order-archive-manager' ); ?>
+		</h2>
+		<div id="woam-subscription-stats" class="woam-loading">
+			<?php esc_html_e( 'Loading subscription data...', 'woo-order-archive-manager' ); ?>
+		</div>
+	</div>
 </div>
 
 <!-- Archive Readiness & Growth Forecast Row -->

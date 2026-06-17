@@ -158,25 +158,31 @@ Tabs Navigation Styles
 	gap: 12px;
 }
 
+/* Hero Section Buttons - Fix hover text color */
+/* Hero Section Buttons - Fixed */
 .woam-hero-buttons .woam-button--primary {
-	background: #ffffff;
-	color: var(--woam-purple);
-	border-color: #ffffff;
+    background: #ffffff;
+    color: #7f54b3;
+    border-color: #ffffff;
 }
 
 .woam-hero-buttons .woam-button--primary:hover {
-	background: rgba(255, 255, 255, 0.9);
+    background: #5a3d8a; /* Darker purple on hover for contrast */
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.8);
+    transform: translateY(-1px);
 }
 
 .woam-hero-buttons .woam-button--secondary {
-	background: transparent;
-	color: #ffffff;
-	border-color: rgba(255, 255, 255, 0.5);
+    background: transparent;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.5);
 }
 
 .woam-hero-buttons .woam-button--secondary:hover {
-	border-color: #ffffff;
-	background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.8);
 }
 
 /* Header Subtext Styles */
@@ -380,6 +386,19 @@ Tabs Navigation Styles
 	color: var(--woam-muted);
 	margin: -4px 0 8px 0;
 	padding-left: 0;
+}
+
+/* 1-Column Grid */
+.woam-grid--1col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+/* Ensure cards don't overlap */
+.woam-grid--1col .woam-card {
+    margin-bottom: 0;
 }
 
 /* Recommendation Card */
@@ -825,6 +844,22 @@ Tabs Navigation Styles
 	font-size: 12px;
 	color: var(--woam-muted);
 	line-height: 1.4;
+}
+
+/* Gap between educational and activity sections */
+.woam-card--education {
+    margin-bottom: 30px;
+}
+
+/* Or if you want a divider between them */
+.woam-card--education {
+    margin-bottom: 30px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--woam-border);
+}
+
+.woam-card--activity {
+    margin-top: 0;
 }
 
 /* Activity Timeline */
