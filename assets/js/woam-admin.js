@@ -839,11 +839,7 @@
                 }
             });
         }
-        
-        // Set max date to today
-        const today = new Date().toISOString().split('T')[0];
-        toInput.max = today;
-        
+                
         // When 'From' date changes, update 'To' min
         fromInput.addEventListener('change', function() {
             if (this.value) {
@@ -895,27 +891,33 @@
         container.querySelectorAll('.woam-preset-btn').forEach(btn => {
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
-            
+
             newBtn.addEventListener('click', function() {
                 const preset = this.dataset.preset;
                 const fromInput = document.getElementById('woam-date-from');
                 const toInput = document.getElementById('woam-date-to');
+                const rangeLabelEl = document.getElementById('woam-general-range-label');
                 const today = new Date();
                 const todayStr = today.toISOString().split('T')[0];
-                
+
                 container.querySelectorAll('.woam-preset-btn').forEach(b => {
                     b.classList.remove('woam-preset-btn--active');
                 });
-                
+
                 if (preset === 'custom') {
                     if (dateRange) dateRange.style.display = 'flex';
                     fromInput.disabled = false;
                     toInput.disabled = false;
                     fromInput.focus();
                     this.classList.add('woam-preset-btn--active');
+
+                    // Dates aren't chosen yet for a custom range — clear any
+                    // stale label from a previously-selected preset so it
+                    // doesn't claim a range that's no longer active.
+                    if (rangeLabelEl) rangeLabelEl.textContent = '';
                     return;
                 }
-                
+
                 let months = 0;
                 switch (preset) {
                     case '3months': months = 3; break;
@@ -924,34 +926,40 @@
                     case '24months': months = 24; break;
                     default: return;
                 }
-                
+
                 const fromDate = new Date();
                 fromDate.setMonth(fromDate.getMonth() - months);
-                
+
                 const yyyy = fromDate.getFullYear();
                 const mm = String(fromDate.getMonth() + 1).padStart(2, '0');
                 const dd = String(fromDate.getDate()).padStart(2, '0');
                 const fromStr = `${yyyy}-${mm}-${dd}`;
-                
+
                 fromInput.value = fromStr;
                 toInput.value = todayStr;
-                
+
                 fromInput.disabled = false;
                 toInput.disabled = false;
-                
+
                 // Update datepicker values if available
                 if (typeof jQuery !== 'undefined' && jQuery.datepicker) {
                     jQuery(fromInput).datepicker('setDate', fromStr);
                     jQuery(toInput).datepicker('setDate', todayStr);
                 }
-                
+
                 this.classList.add('woam-preset-btn--active');
 
                 // Hide custom date inputs when a preset is selected.
                 if (dateRange) dateRange.style.display = 'none';
 
+                // Show the explicit range immediately (don't wait for the
+                // AJAX analysis call) so "2 years ago" reads unambiguously
+                // as "from <date> to today", not "only orders from that year".
+                if (rangeLabelEl) {
+                    rangeLabelEl.textContent = formatDateRangeLabel(fromStr, todayStr);
+                }
+
                 loadArchiveAnalysisRange();
-                
             });
         });
     }
@@ -977,6 +985,20 @@
     }
 
     /**
+     * Builds a human-readable "From X to Y" string for the currently
+     * selected archive range, so preset buttons like "2 years ago" are
+     * unambiguous about what they actually select (rolling window ending
+     * today, not a fixed calendar year).
+     */
+    function formatDateRangeLabel(fromDate, toDate) {
+        const fmt = (d) => {
+            const parsed = new Date(d + 'T00:00:00');
+            return parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        };
+        return `Archiving orders placed from ${fmt(fromDate)} to ${fmt(toDate)}`;
+    }
+
+    /**
      * Load General Orders Analysis with date range
      */
     async function loadGeneralAnalysisRange(fromDate, toDate) {
@@ -984,35 +1006,42 @@
         const breakdownContainer = document.getElementById('woam-general-breakdown');
         const totalContainer = document.getElementById('woam-general-total');
         const orderCountEl = document.getElementById('woam-general-order-count');
-        
-        // Get selected statuses - if none selected, use all available statuses for display
-        let selectedStatuses = Array.from(
-            document.querySelectorAll('#woam-archive-statuses input:checked')
-        ).map(cb => cb.value);
-        
-        // If no statuses selected, get ALL statuses for analysis display
+        const rangeLabelEl = document.getElementById('woam-general-range-label');
+
+        // For analysis display: always use ALL available statuses so user sees full picture.
+        // The checkboxes control what gets archived, not what gets displayed here.
         const allStatuses = Array.from(
             document.querySelectorAll('#woam-archive-statuses input')
         ).map(cb => cb.value);
-        
-        // Use all statuses if none selected, otherwise use selected ones
-        const statuses = selectedStatuses.length === 0 ? allStatuses : selectedStatuses;
-        
-        if (statuses.length === 0) {
+
+        if (allStatuses.length === 0) {
             container.style.display = 'none';
             return;
         }
-        
+
+        // Statuses the user has actually checked — used only for the "(selected)" badge.
+        // This is separate from allStatuses, which is what gets displayed.
+        const checkedStatuses = Array.from(
+            document.querySelectorAll('#woam-archive-statuses input:checked')
+        ).map(cb => cb.value);
+
+        const statuses = allStatuses;
+
         container.style.display = 'block';
         breakdownContainer.innerHTML = '<span class="woam-loading">Loading...</span>';
-        
+
+        // Explicit, human-readable range so "2 years ago" etc. is unambiguous.
+        if (rangeLabelEl) {
+            rangeLabelEl.textContent = formatDateRangeLabel(fromDate, toDate);
+        }
+
         try {
             const data = await woamPost('hw_woam_preview_general_orders_range', {
                 from_date: fromDate,
                 to_date: toDate,
                 statuses: statuses
             });
-            
+
             const statusColors = {
                 'wc-completed': { bg: '#e6f4ea', border: '#2ea64a', label: 'Completed' },
                 'wc-processing': { bg: '#e6f0fa', border: '#2271b1', label: 'Processing' },
@@ -1022,24 +1051,24 @@
                 'wc-failed': { bg: '#fdf0f0', border: '#d63638', label: 'Failed' },
                 'wc-pending': { bg: '#f8f4ff', border: '#7f54b3', label: 'Pending' },
             };
-            
+
             let html = '';
             let totalEligible = 0;
             const eligibleStatuses = ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'];
-            
+
             // Show total count first
             if (orderCountEl) {
                 orderCountEl.textContent = `${formatNumber(data.total || 0)} orders`;
             }
-            
+
             // Build breakdown pills
             if (data.breakdown && Object.keys(data.breakdown).length > 0) {
                 for (const [status, count] of Object.entries(data.breakdown)) {
                     if (count > 0) {
                         const color = statusColors[status] || { bg: '#f0f0f1', border: '#646970', label: status.replace('wc-', '') };
                         const isEligible = eligibleStatuses.includes(status);
-                        const isSelected = selectedStatuses.includes(status);
-                        
+                        const isSelected = checkedStatuses.includes(status);
+
                         html += `
                             <div style="background: ${color.bg}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${color.border}; display: inline-flex; align-items: center; gap: 6px;">
                                 <strong>${formatNumber(count)}</strong>
@@ -1056,9 +1085,9 @@
             } else {
                 html = '<p style="color: #646970; font-size: 12px;">No orders found for the selected period</p>';
             }
-            
+
             breakdownContainer.innerHTML = html;
-            
+
             // Show total eligible with savings estimate
             if (data.estimated_savings_formatted && data.estimated_savings_formatted !== '0 B') {
                 totalContainer.innerHTML = `
@@ -1078,7 +1107,7 @@
                     </span>
                 `;
             }
-            
+
         } catch (err) {
             breakdownContainer.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
         }
@@ -1092,22 +1121,22 @@
         const breakdownContainer = document.getElementById('woam-subscription-breakdown');
         const totalContainer = document.getElementById('woam-subscription-total');
         const orderCountEl = document.getElementById('woam-subscription-order-count');
-        
+
         // Show container even if loading
         container.style.display = 'block';
         breakdownContainer.innerHTML = '<span class="woam-loading">Loading...</span>';
-        
+
         try {
             const data = await woamPost('hw_woam_preview_subscription_orders_range', {
                 from_date: fromDate,
                 to_date: toDate
             });
-            
+
             if (!data.subscriptions_active) {
                 container.style.display = 'none';
                 return;
             }
-            
+
             const subLabels = {
                 'active': 'Active',
                 'cancelled': 'Cancelled',
@@ -1116,32 +1145,31 @@
                 'on-hold': 'On Hold',
                 'pending-cancel': 'Pending Cancel'
             };
-            
+
             const protectedStatuses = ['active', 'on-hold', 'pending-cancel'];
             const eligibleStatuses = ['cancelled', 'expired', 'failed'];
-            
-            // Update the subscription stats mini cards
+
+            // Single source of truth for the mini-stat tallies — built once,
+            // from the breakdown, and written to the DOM exactly once below.
             let protectedCount = 0;
             let cancelledCount = 0;
             let expiredCount = 0;
-            let eligibleCount = 0;
-            
-            // Update breakdown and stats
-            let html = '';
             let totalEligible = 0;
             let totalProtected = 0;
-            
-            // Get selected subscription statuses
+
+            let html = '';
+
+            // Get selected subscription statuses (for the "(selected)" badge)
             const selectedSubStatuses = Array.from(
                 document.querySelectorAll('#woam-subscription-statuses input:checked:not(:disabled)')
             ).map(cb => cb.value);
-            
+
             // Show total count
             if (orderCountEl) {
                 orderCountEl.textContent = `${formatNumber(data.total || 0)} orders`;
             }
-            
-            // Show breakdown by subscription status
+
+            // Build breakdown pills + tally mini stats in one pass
             if (data.breakdown && Object.keys(data.breakdown).length > 0) {
                 for (const [status, count] of Object.entries(data.breakdown)) {
                     if (count > 0) {
@@ -1149,8 +1177,7 @@
                         const isEligible = eligibleStatuses.includes(status);
                         const label = subLabels[status] || status;
                         const isSelected = selectedSubStatuses.includes(status);
-                        
-                        // Track for mini stats
+
                         if (isProtected) {
                             protectedCount += count;
                             totalProtected += count;
@@ -1159,7 +1186,7 @@
                             if (status === 'cancelled') cancelledCount += count;
                             if (status === 'expired') expiredCount += count;
                         }
-                        
+
                         html += `
                             <div style="background: ${isProtected ? '#fdf0f0' : '#e6f4ea'}; padding: 6px 12px; border-radius: 4px; font-size: 12px; border-left: 3px solid ${isProtected ? '#d63638' : '#2ea64a'}; display: inline-flex; align-items: center; gap: 6px;">
                                 <strong>${formatNumber(count)}</strong>
@@ -1174,21 +1201,25 @@
             } else {
                 html = '<p style="color: #646970; font-size: 12px;">No subscription orders found</p>';
             }
-            
-            // Update mini stats
-            updateSubscriptionMiniStats(protectedCount, cancelledCount, expiredCount, totalEligible);
-            
+
+            // Single render — no earlier placeholder write to clobber.
             breakdownContainer.innerHTML = html;
+
             totalContainer.innerHTML = `
                 <strong>Eligible for archiving: ${formatNumber(totalEligible)}</strong>
                 <span style="color: #d63638; margin-left: 16px;">
                     Protected: ${formatNumber(totalProtected)}
                 </span>
             `;
-            
+
+            // Single writer for the four mini-stat boxes, derived from the
+            // same breakdown tally used for the pills above — no duplicate
+            // writes from data.protected/data.eligible competing with this.
+            updateSubscriptionMiniStats(protectedCount, cancelledCount, expiredCount, totalEligible);
+
             // Update checkbox counts
             updateSubscriptionCheckboxCounts(data.breakdown);
-            
+
         } catch (err) {
             breakdownContainer.innerHTML = `<p class="woam-error">${escHtml(err.message)}</p>`;
         }
@@ -1238,97 +1269,6 @@
      */
 
     /**
-     * Debounce utility to prevent too many API calls
-     */
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-
-    /**
-     * Fetches real-time savings estimate based on current filters
-     */
-    async function fetchRealTimeEstimate() {
-        const beforeDate = document.getElementById('woam-before-date')?.value;
-        const statuses = Array.from(
-            document.querySelectorAll('#woam-archive-statuses input:checked')
-        ).map(cb => cb.value);
-
-        if (!beforeDate || statuses.length === 0) {
-            const estimateContainer = document.getElementById('woam-real-time-estimate');
-            if (estimateContainer) {
-                estimateContainer.style.display = 'none';
-            }
-            return;
-        }
-
-        const estimateContainer = document.getElementById('woam-real-time-estimate');
-        const loadingEl = document.getElementById('woam-estimate-loading');
-        const contentEl = document.querySelector('.woam-estimate-content');
-        const footerEl = document.getElementById('woam-estimate-detail');
-
-        estimateContainer.style.display = 'block';
-        loadingEl.style.display = 'flex';
-        contentEl.style.opacity = '0.5';
-
-        try {
-            const data = await woamPost('hw_woam_get_savings_estimate', {
-                before_date: toDate,
-                statuses: allStatuses,
-            });
-
-            document.getElementById('woam-estimate-order-count').textContent = formatNumber(data.order_count);
-            document.getElementById('woam-estimate-space-saved').textContent = data.estimated_size;
-
-            if (data.order_count > 0) {
-                footerEl.style.display = 'flex';
-                document.getElementById('woam-estimate-breakdown').innerHTML = 
-                    `${formatNumber(data.row_counts.order_meta)} meta rows, ${formatNumber(data.row_counts.order_items)} items, ${formatNumber(data.row_counts.order_notes)} notes`;
-            } else {
-                footerEl.style.display = 'none';
-            }
-
-        } catch (err) {
-            console.error('Failed to fetch estimate:', err);
-            document.getElementById('woam-estimate-order-count').textContent = '0';
-            document.getElementById('woam-estimate-space-saved').textContent = '0 MB';
-            document.getElementById('woam-estimate-detail').style.display = 'none';
-        } finally {
-            loadingEl.style.display = 'none';
-            contentEl.style.opacity = '1';
-        }
-    }
-
-    const debouncedFetchEstimate = debounce(fetchRealTimeEstimate, 500);
-
-    /**
-     * Sets up real-time estimate listeners on filter changes
-     */
-    function initRealTimeEstimate() {
-        const beforeDateInput = document.getElementById('woam-before-date');
-        const statusCheckboxes = document.querySelectorAll('#woam-archive-statuses input');
-
-        if (!beforeDateInput) return;
-
-        beforeDateInput.addEventListener('change', () => {
-            debouncedFetchEstimate();
-        });
-
-        statusCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
-                debouncedFetchEstimate();
-            });
-        });
-    }
-
-    /**
      * Bulk select/deselect functionality
      */
     function initBulkSelectors() {
@@ -1341,7 +1281,7 @@
                 checkboxes.forEach(cb => {
                     cb.checked = true;
                 });
-                debouncedFetchEstimate();
+                loadArchiveAnalysisRange();
             });
         }
 
@@ -1351,7 +1291,7 @@
                 checkboxes.forEach(cb => {
                     cb.checked = false;
                 });
-                debouncedFetchEstimate();
+                loadArchiveAnalysisRange();
             });
         }
     }
@@ -1361,29 +1301,65 @@
      */
     function applyRecommendationFromStorage() {
         const savedRec = sessionStorage.getItem('woam_recommendation');
-        if (savedRec) {
-            try {
-                const rec = JSON.parse(savedRec);
-                const dateInput = document.getElementById('woam-before-date');
-                if (dateInput && rec.date) {
-                    dateInput.value = rec.date;
+        if (!savedRec) return;
+
+        try {
+            const rec = JSON.parse(savedRec);
+
+            const toInput = document.getElementById('woam-date-to');
+            const fromInput = document.getElementById('woam-date-from');
+            const dateRange = document.querySelector('.woam-date-range');
+            const rangeLabelEl = document.getElementById('woam-general-range-label');
+
+            // The recommendation only carries a single cutoff date
+            // ("archive orders before this date"), so it maps to the
+            // "To" field. We don't guess a "From" date — the user picks
+            // how far back to go, via Custom Range, to avoid silently
+            // sweeping in more orders than the recommendation intended.
+            if (toInput && rec.date) {
+                toInput.value = rec.date;
+                toInput.disabled = false;
+
+                if (typeof jQuery !== 'undefined' && jQuery.datepicker) {
+                    jQuery(toInput).datepicker('setDate', rec.date);
                 }
-                
-                if (rec.statuses && rec.statuses.length) {
-                    const checkboxes = document.querySelectorAll('#woam-archive-statuses input');
-                    checkboxes.forEach(cb => {
-                        cb.checked = rec.statuses.includes(cb.value);
-                    });
-                }
-                
-                sessionStorage.removeItem('woam_recommendation');
-                
-                setTimeout(() => {
-                    debouncedFetchEstimate();
-                }, 100);
-            } catch (e) {
-                console.error('Failed to apply recommendation:', e);
             }
+
+            if (fromInput) {
+                fromInput.disabled = false;
+            }
+
+            // Switch to Custom Range mode and reveal the date inputs, since
+            // we've just set "To" directly rather than via a preset button.
+            const container = document.querySelector('.woam-steps[data-mode="archive"]');
+            if (container) {
+                container.querySelectorAll('.woam-preset-btn').forEach(b => {
+                    b.classList.toggle('woam-preset-btn--active', b.dataset.preset === 'custom');
+                });
+            }
+            if (dateRange) dateRange.style.display = 'flex';
+
+            if (rec.statuses && rec.statuses.length) {
+                const checkboxes = document.querySelectorAll('#woam-archive-statuses input');
+                checkboxes.forEach(cb => {
+                    cb.checked = rec.statuses.includes(cb.value);
+                });
+            }
+
+            sessionStorage.removeItem('woam_recommendation');
+
+            // Prompt the user to fill in "From" rather than guessing it,
+            // and only load the analysis once both dates are present.
+            if (fromInput && !fromInput.value) {
+                fromInput.focus();
+            } else {
+                setTimeout(() => {
+                    loadArchiveAnalysisRange();
+                }, 100);
+            }
+
+        } catch (e) {
+            console.error('Failed to apply recommendation:', e);
         }
     }
 
@@ -1395,14 +1371,16 @@
 
         let processed = 0;
         let succeeded = 0;
+        let skipped = 0;
         let failed = 0;
         let batchCount = 0;
+        const skipReasonSamples = [];
         const startTime = Date.now();
 
         startBtn.disabled = true;
         progressEl.style.display = 'block';
         summaryEl.innerHTML = '';
-        
+
         if (confirmEl) {
             confirmEl.style.display = 'none';
         }
@@ -1418,16 +1396,27 @@
 
                 processed += data.processed;
                 succeeded += data.succeeded;
+                // 'skipped' is new (subscription-protected orders); older
+                // endpoints (restore/delete) won't send it, so default to 0.
+                skipped += data.skipped || 0;
                 failed += data.failed;
+
+                if (Array.isArray(data.skip_reasons)) {
+                    for (const entry of data.skip_reasons) {
+                        if (skipReasonSamples.length < 5) {
+                            skipReasonSamples.push(entry);
+                        }
+                    }
+                }
 
                 const pct = total > 0 ? Math.min(Math.round((processed / total) * 100), 100) : 100;
                 fillEl.style.width = pct + '%';
-                
+
                 const elapsed = Math.round((Date.now() - startTime) / 1000);
                 const minutes = Math.floor(elapsed / 60);
                 const seconds = elapsed % 60;
                 const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-                
+
                 let etaStr = '--';
                 if (processed > 0 && processed < total) {
                     const avgTimePerOrder = elapsed / processed;
@@ -1437,7 +1426,7 @@
                     const etaSecondsRemain = etaSeconds % 60;
                     etaStr = etaMinutes > 0 ? `${etaMinutes}m ${etaSecondsRemain}s` : `${etaSecondsRemain}s`;
                 }
-                
+
                 textEl.innerHTML = `
                     <div style="display: flex; flex-direction: column; gap: 6px; padding: 8px 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1452,6 +1441,7 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #646970;">
                             <span>${formatNumber(succeeded)} succeeded</span>
+                            <span style="color: #7f54b3;">${formatNumber(skipped)} skipped</span>
                             <span style="color: #d63638;">${formatNumber(failed)} failed</span>
                         </div>
                     </div>
@@ -1468,14 +1458,33 @@
             const finalTime = minutesFinal > 0 ? `${minutesFinal}m ${secondsFinal}s` : `${secondsFinal}s`;
 
             const dryNote = payload.dry_run ? ' <em>(dry run — no changes made)</em>' : '';
+
+            let skipReasonsHtml = '';
+            if (skipReasonSamples.length > 0) {
+                const items = skipReasonSamples
+                    .map(s => `<li>Order #${formatNumber(s.order_id)} — ${escHtml(s.reason)}</li>`)
+                    .join('');
+                const moreNote = skipped > skipReasonSamples.length
+                    ? `<p style="font-size: 11px; color: #646970; margin-top: 4px;">…and ${formatNumber(skipped - skipReasonSamples.length)} more, for similar reasons.</p>`
+                    : '';
+                skipReasonsHtml = `
+                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
+                        <p style="font-size: 12px; color: #7f54b3; margin: 0 0 4px;"><strong>Why orders were skipped:</strong></p>
+                        <ul style="margin: 0 0 0 16px; font-size: 12px; color: #646970;">${items}</ul>
+                        ${moreNote}
+                    </div>`;
+            }
+
             summaryEl.innerHTML = `
                 <div class="woam-summary woam-summary--${failed > 0 ? 'warn' : 'ok'}">
                     <div>
                         <p><strong>${formatNumber(succeeded)}</strong> succeeded &nbsp;
+                        <strong>${formatNumber(skipped)}</strong> skipped (subscription-protected) &nbsp;
                         <strong>${formatNumber(failed)}</strong> failed${dryNote}</p>
                         <p style="font-size: 12px; color: #646970; margin-top: 4px;">
                             Completed in ${finalTime} · ${formatNumber(processed)} orders processed · ${batchCount} batches
                         </p>
+                        ${skipReasonsHtml}
                     </div>
                 </div>`;
 
@@ -1499,9 +1508,6 @@
 
         // Enhanced preset buttons with range support
         enhancePresetButtonsRange();
-
-        // Initialize real-time estimate listeners
-        initRealTimeEstimate();
 
         // Initialize bulk selectors
         initBulkSelectors();
@@ -1661,6 +1667,7 @@
             await runBatchLoopEnhanced({
                 action: 'hw_woam_archive_batch',
                 payload: { 
+                    from_date: fromDate,
                     before_date: toDate, 
                     statuses: allStatuses, 
                     dry_run: dryRun ? '1' : ''

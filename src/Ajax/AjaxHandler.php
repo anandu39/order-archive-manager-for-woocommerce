@@ -277,7 +277,8 @@ class AjaxHandler {
 		$count = match ( $mode ) {
 			'archive'          => $this->archive_handler->get_total_orders_to_archive(
 				sanitize_text_field( wp_unslash( $_POST['before_date'] ?? '' ) ),
-				$statuses
+				$statuses,
+				sanitize_text_field( wp_unslash( $_POST['from_date'] ?? '' ) )
 			),
 			'restore', 'delete' => $this->restore_handler->get_total_archived_orders( $statuses ),
 			default            => 0,
@@ -301,18 +302,17 @@ class AjaxHandler {
 		try {
 			// phpcs:disable WordPress.Security.NonceVerification.Missing
 			$before_date = sanitize_text_field( wp_unslash( $_POST['before_date'] ?? '' ) );
+			$from_date   = sanitize_text_field( wp_unslash( $_POST['from_date'] ?? '' ) );
 
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 				? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
 				: array();
 
-			$dry_run = ! empty( $_POST['dry_run'] );
-			
-			// Get batch size from request - FIXED: passed correctly
+			$dry_run    = ! empty( $_POST['dry_run'] );
 			$batch_size = isset( $_POST['batch_size'] ) ? (int) $_POST['batch_size'] : 0;
 			// phpcs:enable WordPress.Security.NonceVerification.Missing
 
-			$result = $this->archive_handler->process_batch( $before_date, $statuses, $dry_run, $batch_size );
+			$result = $this->archive_handler->process_batch( $before_date, $statuses, $dry_run, $batch_size, $from_date );
 
 		} finally {
 			$this->release_lock();
@@ -680,6 +680,19 @@ class AjaxHandler {
 			'refunds'       => $wpdb->posts, // Refunds are in wp_posts too
 		);
 
+		// Per-type fallback estimates, used only when information_schema
+		// can't give us a real average (e.g. table has zero rows right now).
+		// Declared before the loop so it can be used as the per-type
+		// fallback instead of a single flat number for every table.
+		$avg_size_map = array(
+			'orders'      => 2000, // ~2KB per order post
+			'order_meta'  => 100,  // ~100 bytes per meta
+			'order_items' => 200,  // ~200 bytes per item
+			'item_meta'   => 100,  // ~100 bytes per item meta
+			'order_notes' => 150,  // ~150 bytes per note
+			'refunds'     => 1500, // ~1.5KB per refund
+		);
+
 		$avg_row_sizes = array();
 
 		foreach ( $table_list as $key => $table ) {
@@ -693,21 +706,16 @@ class AjaxHandler {
 					$table
 				)
 			);
-			$avg_row_sizes[ $key ] = $avg > 0 ? $avg : 100; // Fallback to 100 bytes
+
+			// Fall back to the per-type estimate (not a flat 100 bytes)
+			// when information_schema has no usable row-size data.
+			$avg_row_sizes[ $key ] = $avg > 0 ? $avg : ( $avg_size_map[ $key ] ?? 100 );
 		}
 
 		// ---------------------------------------------------------------------
 		// Step 4 — estimate total bytes freed.
 		// ---------------------------------------------------------------------
 		$estimated_bytes = 0;
-		$avg_size_map = array(
-			'orders'        => 2000,   // ~2KB per order post
-			'order_meta'    => 100,    // ~100 bytes per meta
-			'order_items'   => 200,    // ~200 bytes per item
-			'item_meta'     => 100,    // ~100 bytes per item meta
-			'order_notes'   => 150,    // ~150 bytes per note
-			'refunds'       => 1500,   // ~1.5KB per refund
-		);
 
 		foreach ( $row_counts as $key => $count ) {
 			$avg_size = $avg_row_sizes[ $key ] ?? $avg_size_map[ $key ] ?? 100;

@@ -81,9 +81,17 @@ class AdminPage {
 		wp_enqueue_script(
 			'woam-admin',
 			HW_WOAM_URL . 'assets/js/woam-admin.js',
-			array(),
+			array( 'jquery-ui-datepicker' ),
 			HW_WOAM_VERSION,
-			true  // Load in footer — DOM is ready, no jQuery dependency needed.
+			true
+		);
+
+		// WordPress ships jQuery UI Datepicker CSS via this handle.
+		wp_enqueue_style(
+			'woam-jquery-ui',
+			'//ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.min.css',
+			array(),
+			'1.13.2'
 		);
 
 		wp_localize_script(

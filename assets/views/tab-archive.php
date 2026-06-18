@@ -34,15 +34,13 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
 
             <div class="woam-date-range">
                 <div class="woam-date-input-wrapper">
-                    <span class="dashicons dashicons-calendar-alt"></span>
-                    <input type="date" id="woam-date-from" class="woam-input" />
-                    <span class="woam-date-label"><?php esc_html_e( 'From', 'woo-order-archive-manager' ); ?></span>
+                    <label for="woam-date-from" style="font-size:12px; color:#646970; display:block; margin-bottom:4px;"><?php esc_html_e( 'From', 'woo-order-archive-manager' ); ?></label>
+                    <input type="text" id="woam-date-from" class="woam-input" placeholder="<?php esc_attr_e( 'Choose starting date', 'woo-order-archive-manager' ); ?>" readonly style="width:160px; cursor:pointer;" />
                 </div>
-                <span class="woam-date-separator"><?php esc_html_e( 'to', 'woo-order-archive-manager' ); ?></span>
+                <span class="woam-date-separator" style="padding-top:20px;"><?php esc_html_e( 'to', 'woo-order-archive-manager' ); ?></span>
                 <div class="woam-date-input-wrapper">
-                    <span class="dashicons dashicons-calendar-alt"></span>
-                    <input type="date" id="woam-date-to" class="woam-input" />
-                    <span class="woam-date-label"><?php esc_html_e( 'To', 'woo-order-archive-manager' ); ?></span>
+                    <label for="woam-date-to" style="font-size:12px; color:#646970; display:block; margin-bottom:4px;"><?php esc_html_e( 'To', 'woo-order-archive-manager' ); ?></label>
+                    <input type="text" id="woam-date-to" class="woam-input" placeholder="<?php esc_attr_e( 'Choose ending date', 'woo-order-archive-manager' ); ?>" readonly style="width:160px; cursor:pointer;" />
                 </div>
             </div>
 
@@ -53,6 +51,8 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
                 <button type="button" class="woam-preset-btn" data-preset="24months"><?php esc_html_e( '2 years ago', 'woo-order-archive-manager' ); ?></button>
                 <button type="button" class="woam-preset-btn" data-preset="custom"><?php esc_html_e( 'Custom Range', 'woo-order-archive-manager' ); ?></button>
             </div>
+
+            <p id="woam-general-range-label" style="font-size: 12px; color: #646970; margin-top: 8px; min-height: 16px;"></p>
         </div>
 
         <!-- ============================================================ -->

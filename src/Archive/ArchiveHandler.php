@@ -71,17 +71,21 @@ class ArchiveHandler {
 	 * @param array  $statuses    Array of target post statuses.
 	 * @return int Total order count matching criteria.
 	 */
-	public function get_total_orders_to_archive( string $before_date, array $statuses ): int {
+	public function get_total_orders_to_archive( string $before_date, array $statuses, string $from_date = '' ): int {
 
 		if ( empty( $statuses ) ) {
-			return 0; // No statuses means no orders to archive.
+			return 0;
 		}
 
 		$in_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
 
-		$query = "SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders})";
-
-		$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses );
+		if ( ! empty( $from_date ) ) {
+			$query  = "SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders})";
+			$params = array_merge( array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), $statuses );
+		} else {
+			$query  = "SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders})";
+			$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses );
+		}
 
 		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
@@ -95,7 +99,7 @@ class ArchiveHandler {
 	 * @param array  $statuses    Array of target post statuses.
 	 * @return array Array of matching integer order IDs.
 	 */
-	public function get_batch_order_ids( string $before_date, array $statuses ): array {
+	public function get_batch_order_ids( string $before_date, array $statuses, string $from_date = '' ): array {
 
 		if ( empty( $statuses ) ) {
 			return array();
@@ -103,9 +107,13 @@ class ArchiveHandler {
 
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}) ORDER BY ID ASC LIMIT %d";
-
-		$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses, array( $this->batch_size ) );
+		if ( ! empty( $from_date ) ) {
+			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}) ORDER BY ID ASC LIMIT %d";
+			$params = array_merge( array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), $statuses, array( $this->batch_size ) );
+		} else {
+			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}) ORDER BY ID ASC LIMIT %d";
+			$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses, array( $this->batch_size ) );
+		}
 
 		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
@@ -381,26 +389,31 @@ class ArchiveHandler {
 	}
 
 	/**
-	 * Archives a single order by moving its data from live tables to archive tables,
-	 * then deleting it from live tables. Runs inside a database transaction so
-	 * either all steps succeed or nothing changes, ensuring data integrity.
+	 * Archives a single order. Returns a result code (not just bool) so the
+	 * caller can distinguish an intentional skip (subscription-protected)
+	 * from an actual failure — these need separate buckets in batch
+	 * reporting, since "skipped" is expected/safe behaviour and "failed"
+	 * indicates something went wrong.
 	 *
 	 * @param int  $order_id ID of the order to archive.
 	 * @param bool $dry_run  Optional. If true, simulates the process and rolls back. Default false.
-	 * @return bool True on success, false on failure.
+	 * @return array{status: string, reason: string} status is one of 'success', 'skipped', 'failed'.
 	 */
-	private function archive_order( int $order_id, bool $dry_run = false ): bool {
+	private function archive_order( int $order_id, bool $dry_run = false ): array {
 
 		$this->wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		try {
 
 			// Guard - skip subscription-linked order to protect billing chains.
-			if ( $this->is_subscription_linked( $order_id ) ) {
-				$this->logger->queue( $order_id, 'archived', 'skipped', 'Order is linked to an Subscription.' );
+			$subscription_status = $this->get_subscription_status( $order_id );
+
+			if ( $subscription_status['is_linked'] ) {
+				$reason = $subscription_status['reason'];
+				$this->logger->queue( $order_id, 'archived', 'skipped', $reason );
 				// Clean transaction close before premature functional exit path.
 				$this->wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				return false;
+				return array( 'status' => 'skipped', 'reason' => $reason );
 			}
 
 			// Copy — parent first, children after.
@@ -436,14 +449,14 @@ class ArchiveHandler {
 				$this->logger->queue( $order_id, 'archive', 'success' );
 			}
 
-			return true;
+			return array( 'status' => 'success', 'reason' => '' );
 
 		} catch ( \Exception $e ) {
 			$this->wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$action = $dry_run ? 'dry_run' : 'archive';
 			$this->logger->queue( $order_id, $action, 'error', $e->getMessage() );
 
-			return false;
+			return array( 'status' => 'failed', 'reason' => $e->getMessage() );
 		}
 	}
 
@@ -1095,28 +1108,47 @@ class ArchiveHandler {
 	 * @param int                $batch_size  Optional custom batch size.
 	 * @return array{processed: int, succeeded: int, failed: int, dry_run: bool}
 	 */
-	public function process_batch( string $before_date, array $statuses, bool $dry_run = false, int $batch_size = 0 ): array {
-		// Use custom batch size if provided, otherwise use default
+	public function process_batch( string $before_date, array $statuses, bool $dry_run = false, int $batch_size = 0, string $from_date = '' ): array {
 		if ( $batch_size > 0 ) {
 			$this->batch_size = $batch_size;
 		}
-		
-		$order_ids = $this->get_batch_order_ids( $before_date, $statuses );
+
+		$order_ids = $this->get_batch_order_ids( $before_date, $statuses, $from_date );
 
 		$results = array(
 			'processed' => 0,
 			'succeeded' => 0,
+			'skipped'   => 0,
 			'failed'    => 0,
 			'dry_run'   => $dry_run,
+			// Sample of skip reasons for this batch, capped to keep the
+			// AJAX payload small — the JS surfaces these in the summary.
+			'skip_reasons' => array(),
 		);
+
+		$max_sample_reasons = 5;
 
 		foreach ( $order_ids as $order_id ) {
 			++$results['processed'];
 
-			if ( $this->archive_order( $order_id, $dry_run ) ) {
-				++$results['succeeded'];
-			} else {
-				++$results['failed'];
+			$outcome = $this->archive_order( $order_id, $dry_run );
+
+			switch ( $outcome['status'] ) {
+				case 'success':
+					++$results['succeeded'];
+					break;
+				case 'skipped':
+					++$results['skipped'];
+					if ( count( $results['skip_reasons'] ) < $max_sample_reasons ) {
+						$results['skip_reasons'][] = array(
+							'order_id' => $order_id,
+							'reason'   => $outcome['reason'],
+						);
+					}
+					break;
+				default:
+					++$results['failed'];
+					break;
 			}
 		}
 
