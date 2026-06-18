@@ -75,16 +75,14 @@ class SubscriptionManager {
 		$statuses     = array_merge( self::PROTECTED_STATUSES, self::SAFE_STATUSES );
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		$results = $this->wpdb->get_results(
-			$this->wpdb->prepare(
-				"SELECT post_status, COUNT(*) as count 
-                FROM %i 
-                WHERE post_type = 'shop_subscription' 
-                AND post_status IN ({$placeholders})
-                GROUP BY post_status",
-				array_merge( array( $this->wpdb->posts ), $statuses )
-			)
-		);
+		$sql = "SELECT post_status, COUNT(*) as count
+            FROM `{$this->wpdb->posts}`
+            WHERE post_type = 'shop_subscription'
+            AND post_status IN ({$placeholders})
+            GROUP BY post_status";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
+		$results = $this->wpdb->get_results( $this->wpdb->prepare( $sql, $statuses ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		$stats = array(
 			'active'         => 0,
@@ -110,39 +108,33 @@ class SubscriptionManager {
 			}
 		}
 
-		// Get protected parent orders
-		$stats['protected_parent_orders'] = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(DISTINCT post_parent) 
-                FROM %i 
-                WHERE post_type = 'shop_subscription' 
-                AND post_status IN ({$placeholders})
-                AND post_parent > 0",
-				array_merge( array( $this->wpdb->posts ), self::PROTECTED_STATUSES )
-			)
-		);
+		// Get protected parent orders.
+		$protected_placeholders = implode( ', ', array_fill( 0, count( self::PROTECTED_STATUSES ), '%s' ) );
+		$protected_sql          = "SELECT COUNT(DISTINCT post_parent)
+            FROM `{$this->wpdb->posts}`
+            WHERE post_type = 'shop_subscription'
+            AND post_status IN ({$protected_placeholders})
+            AND post_parent > 0";
 
-		// Get eligible parent orders (safe to archive)
-		$stats['eligible_parent_orders'] = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(DISTINCT post_parent) 
-                FROM %i 
-                WHERE post_type = 'shop_subscription' 
-                AND post_status IN ({$placeholders})
-                AND post_parent > 0",
-				array_merge( array( $this->wpdb->posts ), self::SAFE_STATUSES )
-			)
-		);
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
+		$stats['protected_parent_orders'] = (int) $this->wpdb->get_var( $this->wpdb->prepare( $protected_sql, self::PROTECTED_STATUSES ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
-		// Get renewal orders
-		$stats['renewal_orders'] = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) 
-                FROM %i 
-                WHERE meta_key = '_subscription_renewal'",
-				$this->wpdb->postmeta
-			)
-		);
+		// Get eligible parent orders (safe to archive).
+		$safe_placeholders = implode( ', ', array_fill( 0, count( self::SAFE_STATUSES ), '%s' ) );
+		$eligible_sql      = "SELECT COUNT(DISTINCT post_parent)
+            FROM `{$this->wpdb->posts}`
+            WHERE post_type = 'shop_subscription'
+            AND post_status IN ({$safe_placeholders})
+            AND post_parent > 0";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
+		$stats['eligible_parent_orders'] = (int) $this->wpdb->get_var( $this->wpdb->prepare( $eligible_sql, self::SAFE_STATUSES ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		// Get renewal orders.
+		$renewal_sql = "SELECT COUNT(*) FROM `{$this->wpdb->postmeta}` WHERE meta_key = '_subscription_renewal'";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$stats['renewal_orders'] = (int) $this->wpdb->get_var( $renewal_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return $stats;
 	}
@@ -158,36 +150,30 @@ class SubscriptionManager {
 			return false;
 		}
 
-		// Check if order is a renewal
-		$is_renewal = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) 
-                FROM %i 
-                WHERE post_id = %d 
-                AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')",
-				$this->wpdb->postmeta,
-				$order_id
-			)
-		);
+		// Check if order is a renewal.
+		$renewal_sql = "SELECT COUNT(*)
+            FROM `{$this->wpdb->postmeta}`
+            WHERE post_id = %d
+            AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$is_renewal = (int) $this->wpdb->get_var( $this->wpdb->prepare( $renewal_sql, $order_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		if ( $is_renewal > 0 ) {
 			return true;
 		}
 
-		// Check if any protected subscription has this order as parent
-		$placeholders = implode( ', ', array_fill( 0, count( self::PROTECTED_STATUSES ), '%s' ) );
+		// Check if any protected subscription has this order as parent.
+		$placeholders  = implode( ', ', array_fill( 0, count( self::PROTECTED_STATUSES ), '%s' ) );
+		$protected_sql = "SELECT COUNT(*)
+            FROM `{$this->wpdb->posts}`
+            WHERE post_parent = %d
+            AND post_type = 'shop_subscription'
+            AND post_status IN ({$placeholders})
+            LIMIT 1";
 
-		$has_protected = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) 
-                FROM %i 
-                WHERE post_parent = %d 
-                AND post_type = 'shop_subscription' 
-                AND post_status IN ({$placeholders})
-                LIMIT 1",
-				array_merge( array( $this->wpdb->posts, $order_id ), self::PROTECTED_STATUSES )
-			)
-		);
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
+		$has_protected = (int) $this->wpdb->get_var( $this->wpdb->prepare( $protected_sql, array_merge( array( $order_id ), self::PROTECTED_STATUSES ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return $has_protected > 0;
 	}
@@ -196,7 +182,7 @@ class SubscriptionManager {
 	 * Get subscription orders by status.
 	 *
 	 * @param string $status Subscription status.
-	 * @param int    $limit Limit results.
+	 * @param int    $limit  Limit results.
 	 * @return array<int, array>
 	 */
 	public function get_subscription_orders_by_status( string $status, int $limit = 100 ): array {
@@ -204,23 +190,18 @@ class SubscriptionManager {
 			return array();
 		}
 
-		$results = $this->wpdb->get_results(
-			$this->wpdb->prepare(
-				"SELECT p.ID, p.post_status, p.post_date, 
-                        s.post_status as subscription_status
-                FROM %i p
-                INNER JOIN %i s ON s.post_parent = p.ID
-                WHERE p.post_type = 'shop_order'
-                AND s.post_type = 'shop_subscription'
-                AND s.post_status = %s
-                ORDER BY p.post_date DESC
-                LIMIT %d",
-				$this->wpdb->posts,
-				$this->wpdb->posts,
-				$status,
-				$limit
-			)
-		);
+		$sql = "SELECT p.ID, p.post_status, p.post_date,
+                    s.post_status as subscription_status
+            FROM `{$this->wpdb->posts}` p
+            INNER JOIN `{$this->wpdb->posts}` s ON s.post_parent = p.ID
+            WHERE p.post_type = 'shop_order'
+            AND s.post_type = 'shop_subscription'
+            AND s.post_status = %s
+            ORDER BY p.post_date DESC
+            LIMIT %d";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table names are trusted wpdb properties; only status and limit are dynamic.
+		$results = $this->wpdb->get_results( $this->wpdb->prepare( $sql, $status, $limit ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		$orders = array();
 		foreach ( $results as $row ) {
