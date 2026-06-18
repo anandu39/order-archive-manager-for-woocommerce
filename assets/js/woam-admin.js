@@ -1479,9 +1479,10 @@
                 }
 
                 // ─── ANTI-DEADLOCK TRAP ───
-                // If a batch evaluates elements but moves nothing out of the live view,
-                // and reports no new exclusion IDs, break to prevent an infinite loop.
-                if (data.processed > 0 && data.succeeded === 0 && (!data.failed_ids || data.failed_ids.length === 0)) {
+                // Skip this check on dry runs: succeeded is always 0 because every
+                // transaction is intentionally rolled back. The has_more flag is the
+                // correct termination signal for dry runs.
+                if (!payload.dry_run && data.processed > 0 && data.succeeded === 0 && (!data.failed_ids || data.failed_ids.length === 0)) {
                     throw new Error('Batch processing paused: Items are failing or being skipped without clearing from memory.');
                 }
             }

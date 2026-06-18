@@ -344,15 +344,24 @@ class AjaxHandler {
 		$this->acquire_lock();
 
 		try {
-            // phpcs:disable WordPress.Security.NonceVerification.Missing
+			// phpcs:disable WordPress.Security.NonceVerification.Missing
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 				? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
 				: array();
 
 			$dry_run = ! empty( $_POST['dry_run'] );
-            // phpcs:disable WordPress.Security.NonceVerification.Missing
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 			$result = $this->restore_handler->process_restore_batch( $statuses, $dry_run );
+
+			// Tell the JS loop whether more orders remain.
+			// Dry run rolls everything back so one pass is always enough.
+			if ( $dry_run ) {
+				$result['has_more'] = false;
+			} else {
+				$remaining          = $this->restore_handler->get_total_archived_orders( $statuses );
+				$result['has_more'] = $remaining > 0;
+			}
 
 		} finally {
 			$this->release_lock();
@@ -374,15 +383,23 @@ class AjaxHandler {
 		$this->acquire_lock();
 
 		try {
-            // phpcs:disable WordPress.Security.NonceVerification.Missing
+			// phpcs:disable WordPress.Security.NonceVerification.Missing
 			$statuses = isset( $_POST['statuses'] ) && is_array( $_POST['statuses'] )
 				? array_map( 'sanitize_text_field', wp_unslash( $_POST['statuses'] ) )
 				: array();
 
 			$dry_run = ! empty( $_POST['dry_run'] );
-            // phpcs:disable WordPress.Security.NonceVerification.Missing
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 			$result = $this->delete_handler->process_delete_batch( $statuses, $dry_run );
+
+			// Tell the JS loop whether more orders remain.
+			if ( $dry_run ) {
+				$result['has_more'] = false;
+			} else {
+				$remaining          = $this->delete_handler->get_total_archived_orders( $statuses );
+				$result['has_more'] = $remaining > 0;
+			}
 
 		} finally {
 			$this->release_lock();
