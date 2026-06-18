@@ -11,3 +11,4 @@ parameters:
 
     bootstrapFiles:
         - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+        - phpstan-stubs.php

@@ -534,7 +534,6 @@ class AjaxHandler {
 					'estimated_size'  => '0 B',
 				)
 			);
-			return;
 		}
 
 		// Setup localized variables for standard WooCommerce tables.
@@ -588,7 +587,6 @@ class AjaxHandler {
 					'estimated_size'  => '0 B',
 				)
 			);
-			return;
 		}
 
 		// ---------------------------------------------------------------------
@@ -733,7 +731,7 @@ class AjaxHandler {
 
 			// Fall back to the per-type estimate (not a flat 100 bytes)
 			// when information_schema has no usable row-size data.
-			$avg_row_sizes[ $key ] = $avg > 0 ? $avg : ( $avg_size_map[ $key ] ?? 100 );
+			$avg_row_sizes[ $key ] = $avg > 0 ? $avg : $avg_size_map[ $key ];
 		}
 
 		// ---------------------------------------------------------------------
@@ -742,7 +740,7 @@ class AjaxHandler {
 		$estimated_bytes = 0;
 
 		foreach ( $row_counts as $key => $count ) {
-			$avg_size         = $avg_row_sizes[ $key ] ?? $avg_size_map[ $key ] ?? 100;
+			$avg_size = $avg_row_sizes[ $key ];
 			$estimated_bytes += $count * $avg_size;
 		}
 
@@ -804,7 +802,6 @@ class AjaxHandler {
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_send_json_error( array( 'message' => 'Unauthorized' ) );
-			return;
 		}
 
 		$from_date = isset( $_POST['from_date'] )
@@ -816,7 +813,6 @@ class AjaxHandler {
 
 		if ( empty( $from_date ) || empty( $to_date ) ) {
 			wp_send_json_error( array( 'message' => 'Please select a date range' ) );
-			return;
 		}
 
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via array_map below.
@@ -839,7 +835,6 @@ class AjaxHandler {
 					'estimated_savings_formatted' => '0 B',
 				)
 			);
-			return;
 		}
 
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
@@ -900,7 +895,6 @@ class AjaxHandler {
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_send_json_error( array( 'message' => 'Unauthorized' ) );
-			return;
 		}
 
 		$from_date = isset( $_POST['from_date'] )
@@ -912,7 +906,6 @@ class AjaxHandler {
 
 		if ( empty( $from_date ) || empty( $to_date ) ) {
 			wp_send_json_error( array( 'message' => 'Please select a date range' ) );
-			return;
 		}
 
 		global $wpdb;
@@ -924,7 +917,6 @@ class AjaxHandler {
 					'message'              => 'WooCommerce Subscriptions is not active',
 				)
 			);
-			return;
 		}
 
 		$from_datetime = $from_date . ' 00:00:00';
@@ -1212,7 +1204,6 @@ class AjaxHandler {
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_send_json_error( array( 'message' => 'Unauthorized' ) );
-			return;
 		}
 
 		global $wpdb;
@@ -1224,7 +1215,6 @@ class AjaxHandler {
 					'message'              => 'WooCommerce Subscriptions is not active',
 				)
 			);
-			return;
 		}
 
 		// Get subscription counts by status.
@@ -1301,7 +1291,6 @@ class AjaxHandler {
 
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
 				wp_send_json_error( array( 'message' => 'Unauthorized' ) );
-				return;
 			}
 
 			$manager = new \HW\WOAM\Subscription\SubscriptionManager( $this->wpdb );
@@ -1327,7 +1316,6 @@ class AjaxHandler {
 
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
 				wp_send_json_error( array( 'message' => 'Unauthorized' ) );
-				return;
 			}
 
 			$before_date = isset( $_POST['before_date'] )
@@ -1336,7 +1324,6 @@ class AjaxHandler {
 
 			if ( empty( $before_date ) ) {
 				wp_send_json_error( array( 'message' => 'No date provided' ) );
-				return;
 			}
 
 			global $wpdb;
@@ -1401,7 +1388,6 @@ class AjaxHandler {
 
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
 				wp_send_json_error( array( 'message' => 'Unauthorized' ) );
-				return;
 			}
 
 			$type = isset( $_POST['type'] )
@@ -1445,7 +1431,6 @@ class AjaxHandler {
 					array( 'message' => __( 'You do not have permission to perform this action.', 'woo-order-archive-manager' ) ),
 					403
 				);
-				return;
 			}
 
 			$manager    = new \HW\WOAM\Benchmark\BenchmarkManager( $this->wpdb );
@@ -1474,7 +1459,6 @@ class AjaxHandler {
 					array( 'message' => __( 'You do not have permission to perform this action.', 'woo-order-archive-manager' ) ),
 					403
 				);
-				return;
 			}
 
 			$period = isset( $_POST['period'] )
