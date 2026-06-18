@@ -18,25 +18,9 @@ defined( 'ABSPATH' ) || exit;
 class AnalyticsHandler {
 
 	/**
-	 * WordPress database object.
-	 *
-	 * @var \wpdb
-	 */
-	private \wpdb $wpdb;
-
-	/**
 	 * Lock key constant for job running check.
 	 */
 	private const LOCK_KEY = 'hw_woam_job_running';
-
-	/**
-	 * Constructor.
-	 *
-	 * @param \wpdb $wpdb WordPress database object.
-	 */
-	public function __construct( \wpdb $wpdb ) {
-		$this->wpdb = $wpdb;
-	}
 
 	/**
 	 * Returns a health score (0-100) for the database and archive system.

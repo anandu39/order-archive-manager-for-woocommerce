@@ -225,7 +225,7 @@ class Plugin {
 		$this->archive_handler   = new ArchiveHandler( $wpdb, $this->tables, $this->logger );
 		$this->restore_handler   = new RestoreHandler( $wpdb, $this->tables, $this->logger );
 		$this->delete_handler    = new DeleteHandler( $wpdb, $this->tables, $this->logger );
-		$this->analytics_handler = new AnalyticsHandler( $wpdb );
+		$this->analytics_handler = new AnalyticsHandler();
 		$this->ajax_handler      = new AjaxHandler(
 			$this->archive_handler,
 			$this->restore_handler,
