@@ -29,10 +29,9 @@ class Plugin {
 	/**
 	 * Single instance of the plugin.
 	 *
-	 * @var Plugin|null
+	 * @var self|null
 	 */
-
-	private static ?Plugin $instance = null;
+	private static ?self $instance = null;
 
 	/**
 	 * Table name definitions.
@@ -138,12 +137,12 @@ class Plugin {
 	 * Returns the single instance of the plugin.
 	 * Creates it on first call, returns existing on subsequent calls.
 	 *
-	 * @return static
+	 * @return self
 	 */
-	public static function instance(): static {
+	public static function instance(): self {
 
 		if ( null === self::$instance ) {
-			self::$instance = new static();
+			self::$instance = new self();
 		}
 
 		return self::$instance;
@@ -187,7 +186,7 @@ class Plugin {
 		// Force refresh the analytics handler cache.
 		if ( isset( $this->analytics_handler ) ) {
 			// Recalculate and recache.
-			$this->analytics_handler->get_health_score( true );
+			$this->analytics_handler->get_cached_health_score( true );
 		}
 	}
 

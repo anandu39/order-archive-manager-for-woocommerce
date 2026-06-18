@@ -178,12 +178,7 @@ class Logger {
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$results = $db->get_results( $prepared_sql );
 
-		// 2. Structural normalization: swapping the shorthand syntax with a strict type-check fallback.
-		if ( empty( $results ) || ! is_array( $results ) ) {
-			return array();
-		}
-
-		return $results;
+		return ! empty( $results ) ? $results : array();
 	}
 
 	/**

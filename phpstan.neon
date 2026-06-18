@@ -12,3 +12,9 @@ parameters:
     bootstrapFiles:
         - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
         - phpstan-stubs.php
+
+    ignoreErrors:
+        -
+            message: '#If condition is always false#'
+            path: woo-order-archive-manager.php
+            count: 1

@@ -147,52 +147,6 @@ class ArchiveHandler {
 	}
 
 	/**
-	 * Checks whether an order is linked to an active subscription.
-	 * Archiving subscription-linked orders would break WooCommerce Subscriptions
-	 * billing chains - the renewal system queries wp_posts for parent order IDs.
-	 *
-	 * Return true (and therefore blocks archiving) if:
-	 * - The order has '_subscription_renewal' meta (it is a renewal order)
-	 * - The order has '_subscription_resubscribe' meta (it is a resubscribe order)
-	 * - Any active subscription exists with this order as its parent post
-	 *
-	 * Only runs when WooCommerce Subscription is active. If the plugin is not installed,
-	 * the action is skipped - no false positives.
-	 *
-	 * @param int $order_id Order to check.
-	 * @return bool True if the subscription-linked and should be skipped.
-	 */
-	private function is_subscription_linked( int $order_id ): bool {
-
-		// If WooCommerce Subscription is not active, skip this completely.
-		if ( ! class_exists( 'WC_Subscriptions' ) ) {
-			return false;
-		}
-
-		// Check 1 - is the order a renewal or resubscribe order?
-		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
-		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
-
-		$renewal_meta = $this->wpdb->get_var( $prepared_meta_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		if ( $renewal_meta ) {
-			return true;
-		}
-
-		// Check 2 - does any active subscription have this order as its parent?
-		$query_subs = 'SELECT ID FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' AND post_status IN (\'wc-active\',\'wc-pending-cancel\') LIMIT 1';
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
-		$prepared_subs_sql = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
-
-		$active_subscription = $this->wpdb->get_var( $prepared_subs_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		return (bool) $active_subscription;
-	}
-
-	/**
 	 * Get detailed subscription status for an order.
 	 *
 	 * @param int $order_id Order ID to check.
@@ -259,17 +213,6 @@ class ArchiveHandler {
 			'subscription_status' => null,
 			'is_safe'             => true,
 		);
-	}
-
-	/**
-	 * Check if an order is safe to archive.
-	 *
-	 * @param int $order_id Order ID to check.
-	 * @return bool
-	 */
-	private function is_safe_to_archive( int $order_id ): bool {
-		$status = $this->get_subscription_status( $order_id );
-		return $status['is_safe'];
 	}
 
 	/**

@@ -740,7 +740,7 @@ class AjaxHandler {
 		$estimated_bytes = 0;
 
 		foreach ( $row_counts as $key => $count ) {
-			$avg_size = $avg_row_sizes[ $key ];
+			$avg_size         = $avg_row_sizes[ $key ];
 			$estimated_bytes += $count * $avg_size;
 		}
 
