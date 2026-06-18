@@ -463,14 +463,12 @@ class RestoreHandler {
 	 */
 	private function verify_order_post_restored( int $order_id ): void {
 
-		$exists = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				'SELECT COUNT(*) FROM %i WHERE ID = %d',
-				array( $this->wpdb->posts, $order_id )
-			)
-		);
+		$sql = "SELECT COUNT(*) FROM `{$this->wpdb->posts}` WHERE ID = %d";
 
-		if ( $exists === 0 ) {
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$exists = (int) $this->wpdb->get_var( $this->wpdb->prepare( $sql, $order_id ) );
+
+		if ( 0 === $exists ) {
 			throw new \Exception(
 				"Restore verification failed for order #{$order_id}: post row not found in wp_posts after INSERT."
 			);
