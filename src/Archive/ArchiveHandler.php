@@ -108,7 +108,7 @@ class ArchiveHandler {
 		}
 
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-		
+
 		// Build exclusion clause dynamically if there are IDs to ignore
 		$exclude_clause = '';
 		$exclude_params = array();
@@ -119,24 +119,24 @@ class ArchiveHandler {
 		}
 
 		if ( ! empty( $from_date ) ) {
-			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
-			
+			$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
+
 			// Merge parameters correctly: table, from_date, to_date, statuses, exclusions, limit
-			$params = array_merge( 
-				array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), 
-				$statuses, 
-				$exclude_params, 
-				array( $this->batch_size ) 
+			$params = array_merge(
+				array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ),
+				$statuses,
+				$exclude_params,
+				array( $this->batch_size )
 			);
 		} else {
-			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
-			
+			$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
+
 			// Merge parameters correctly: table, before_date, statuses, exclusions, limit
-			$params = array_merge( 
-				array( $this->wpdb->posts, $before_date ), 
-				$statuses, 
-				$exclude_params, 
-				array( $this->batch_size ) 
+			$params = array_merge(
+				array( $this->wpdb->posts, $before_date ),
+				$statuses,
+				$exclude_params,
+				array( $this->batch_size )
 			);
 		}
 
@@ -438,7 +438,10 @@ class ArchiveHandler {
 				$this->logger->queue( $order_id, 'archived', 'skipped', $reason );
 				// Clean transaction close before premature functional exit path.
 				$this->wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				return array( 'status' => 'skipped', 'reason' => $reason );
+				return array(
+					'status' => 'skipped',
+					'reason' => $reason,
+				);
 			}
 
 			// Copy — parent first, children after.
@@ -474,14 +477,20 @@ class ArchiveHandler {
 				$this->logger->queue( $order_id, 'archive', 'success' );
 			}
 
-			return array( 'status' => 'success', 'reason' => '' );
+			return array(
+				'status' => 'success',
+				'reason' => '',
+			);
 
 		} catch ( \Exception $e ) {
 			$this->wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$action = $dry_run ? 'dry_run' : 'archive';
 			$this->logger->queue( $order_id, $action, 'error', $e->getMessage() );
 
-			return array( 'status' => 'failed', 'reason' => $e->getMessage() );
+			return array(
+				'status' => 'failed',
+				'reason' => $e->getMessage(),
+			);
 		}
 	}
 
@@ -698,19 +707,19 @@ class ArchiveHandler {
 	}
 
 	/**
-     * Copy all refund posts for an order into the order_refunds archive table.
-     * Refunds are shop_order_refunds posts with post_parent = order_id.
-     *
-     * @param int $order_id Parent Order ID.
-     * @throws \Exception If the insert fails.
-     * @return void
-     */
-    private function copy_order_refunds( int $order_id ): void {
+	 * Copy all refund posts for an order into the order_refunds archive table.
+	 * Refunds are shop_order_refunds posts with post_parent = order_id.
+	 *
+	 * @param int $order_id Parent Order ID.
+	 * @throws \Exception If the insert fails.
+	 * @return void
+	 */
+	private function copy_order_refunds( int $order_id ): void {
 
-        $db = $this->wpdb;
+		$db = $this->wpdb;
 
-        // Use standard %d placeholder for the single $order_id mapping
-        $query = "INSERT INTO {$this->tables->order_refunds} (
+		// Use standard %d placeholder for the single $order_id mapping
+		$query = "INSERT INTO {$this->tables->order_refunds} (
             ID, post_author, post_date, post_date_gmt, post_content, post_title, 
             post_excerpt, post_status, post_name, post_modified, post_modified_gmt, 
             post_content_filtered, post_parent, guid, menu_order, post_type, 
@@ -724,18 +733,18 @@ class ArchiveHandler {
         FROM {$db->posts}
         WHERE post_type = 'shop_order_refund' AND post_parent = %d";
 
-        // Prepare the query safely by injecting the single order ID
-        $prepared_sql = $db->prepare( $query, $order_id );
+		// Prepare the query safely by injecting the single order ID
+		$prepared_sql = $db->prepare( $query, $order_id );
 
-        // Execute the query
-        $result = $db->query( $prepared_sql );
+		// Execute the query
+		$result = $db->query( $prepared_sql );
 
-        if ( false === $result ) {
-            throw new \Exception(
-                "Failed to copy order refunds for order #{$order_id}."
-            );
-        }
-    }
+		if ( false === $result ) {
+			throw new \Exception(
+				"Failed to copy order refunds for order #{$order_id}."
+			);
+		}
+	}
 
 	/**
 	 * Copies all refund meta rows for an order's refund into archive.
@@ -1139,13 +1148,13 @@ class ArchiveHandler {
 		$order_ids = $this->get_batch_order_ids( $before_date, $statuses, $from_date, $exclude_ids );
 
 		$results = array(
-			'processed'     => 0,
-			'succeeded'     => 0,
-			'skipped'       => 0,
-			'failed'        => 0,
-			'dry_run'       => $dry_run,
-			'skip_reasons'  => array(),
-			'failed_ids'    => array(), // Pass back to frontend so they can be appended to exclude_ids
+			'processed'    => 0,
+			'succeeded'    => 0,
+			'skipped'      => 0,
+			'failed'       => 0,
+			'dry_run'      => $dry_run,
+			'skip_reasons' => array(),
+			'failed_ids'   => array(), // Pass back to frontend so they can be appended to exclude_ids
 		);
 
 		$max_sample_reasons = 5;
