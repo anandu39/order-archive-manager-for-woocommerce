@@ -57,16 +57,14 @@ class BenchmarkManager {
 	private function benchmark_order_lookup(): float {
 		$start = microtime( true );
 
-		$this->wpdb->get_results(
-			$this->wpdb->prepare(
-				"SELECT ID, post_status, post_date 
-                FROM %i 
-                WHERE post_type = 'shop_order' 
-                AND post_status = 'wc-completed'
-                LIMIT 100",
-				$this->wpdb->posts
-			)
-		);
+		$sql = "SELECT ID, post_status, post_date
+            FROM `{$this->wpdb->posts}`
+            WHERE post_type = 'shop_order'
+            AND post_status = 'wc-completed'
+            LIMIT 100";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$this->wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -79,17 +77,14 @@ class BenchmarkManager {
 	private function benchmark_order_search(): float {
 		$start = microtime( true );
 
-		$this->wpdb->get_results(
-			$this->wpdb->prepare(
-				"SELECT ID, post_title, post_date 
-                FROM %i 
-                WHERE post_type = 'shop_order' 
-                AND post_title LIKE '%s'
-                LIMIT 100",
-				$this->wpdb->posts,
-				'%order%'
-			)
-		);
+		$sql = "SELECT ID, post_title, post_date
+            FROM `{$this->wpdb->posts}`
+            WHERE post_type = 'shop_order'
+            AND post_title LIKE %s
+            LIMIT 100";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$this->wpdb->get_results( $this->wpdb->prepare( $sql, '%order%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -102,15 +97,13 @@ class BenchmarkManager {
 	private function benchmark_order_meta_query(): float {
 		$start = microtime( true );
 
-		$this->wpdb->get_results(
-			$this->wpdb->prepare(
-				"SELECT post_id, meta_key, meta_value 
-                FROM %i 
-                WHERE meta_key = '_order_total'
-                LIMIT 100",
-				$this->wpdb->postmeta
-			)
-		);
+		$sql = "SELECT post_id, meta_key, meta_value
+            FROM `{$this->wpdb->postmeta}`
+            WHERE meta_key = '_order_total'
+            LIMIT 100";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$this->wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -123,15 +116,14 @@ class BenchmarkManager {
 	private function benchmark_order_item_query(): float {
 		$start = microtime( true );
 
-		$this->wpdb->get_results(
-			$this->wpdb->prepare(
-				"SELECT order_item_id, order_item_name, order_item_type 
-                FROM %i 
-                WHERE order_item_type = 'line_item'
-                LIMIT 100",
-				$this->wpdb->prefix . 'woocommerce_order_items'
-			)
-		);
+		$table = $this->wpdb->prefix . 'woocommerce_order_items';
+		$sql   = "SELECT order_item_id, order_item_name, order_item_type
+            FROM `{$table}`
+            WHERE order_item_type = 'line_item'
+            LIMIT 100";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		$this->wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -142,12 +134,10 @@ class BenchmarkManager {
 	 * @return int
 	 */
 	private function get_order_count(): int {
-		return (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order'",
-				$this->wpdb->posts
-			)
-		);
+		$sql = "SELECT COUNT(*) FROM `{$this->wpdb->posts}` WHERE post_type = 'shop_order'";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
+		return (int) $this->wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
@@ -159,15 +149,13 @@ class BenchmarkManager {
 		$tables       = array( $this->wpdb->posts, $this->wpdb->postmeta );
 		$placeholders = implode( ', ', array_fill( 0, count( $tables ), '%s' ) );
 
-		return (int) $this->wpdb->get_var(
-			$this->wpdb->prepare(
-				"SELECT SUM(DATA_LENGTH + INDEX_LENGTH) 
-                FROM information_schema.TABLES 
-                WHERE TABLE_SCHEMA = DATABASE() 
-                AND TABLE_NAME IN ({$placeholders})",
-				$tables
-			)
-		);
+		$sql = "SELECT SUM(DATA_LENGTH + INDEX_LENGTH)
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME IN ({$placeholders})";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
+		return (int) $this->wpdb->get_var( $this->wpdb->prepare( $sql, $tables ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
