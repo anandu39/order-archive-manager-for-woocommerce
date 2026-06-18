@@ -93,26 +93,51 @@ class ArchiveHandler {
 	}
 
 	/**
-	 * Fetch a batch of order IDs that match the archival selection criteria.
+	 * Retrieves a batch of order IDs matching the criteria, explicitly excluding specified IDs.
 	 *
-	 * @param string $before_date Cutoff date (YYYY-MM-DD HH:MM:SS).
-	 * @param array  $statuses    Array of target post statuses.
-	 * @return array Array of matching integer order IDs.
+	 * @param string $before_date
+	 * @param array  $statuses
+	 * @param string $from_date
+	 * @param array  $exclude_ids Array of order IDs to ignore (e.g., failed or skipped items).
+	 * @return array
 	 */
-	public function get_batch_order_ids( string $before_date, array $statuses, string $from_date = '' ): array {
+	public function get_batch_order_ids( string $before_date, array $statuses, string $from_date = '', array $exclude_ids = array() ): array {
 
 		if ( empty( $statuses ) ) {
 			return array();
 		}
 
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		
+		// Build exclusion clause dynamically if there are IDs to ignore
+		$exclude_clause = '';
+		$exclude_params = array();
+		if ( ! empty( $exclude_ids ) ) {
+			$id_placeholders = implode( ', ', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$exclude_clause  = " AND ID NOT IN ($id_placeholders)";
+			$exclude_params  = array_map( 'intval', $exclude_ids );
+		}
 
 		if ( ! empty( $from_date ) ) {
-			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}) ORDER BY ID ASC LIMIT %d";
-			$params = array_merge( array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), $statuses, array( $this->batch_size ) );
+			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
+			
+			// Merge parameters correctly: table, from_date, to_date, statuses, exclusions, limit
+			$params = array_merge( 
+				array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), 
+				$statuses, 
+				$exclude_params, 
+				array( $this->batch_size ) 
+			);
 		} else {
-			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}) ORDER BY ID ASC LIMIT %d";
-			$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses, array( $this->batch_size ) );
+			$query  = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
+			
+			// Merge parameters correctly: table, before_date, statuses, exclusions, limit
+			$params = array_merge( 
+				array( $this->wpdb->posts, $before_date ), 
+				$statuses, 
+				$exclude_params, 
+				array( $this->batch_size ) 
+			);
 		}
 
 		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -673,49 +698,44 @@ class ArchiveHandler {
 	}
 
 	/**
-	 * Copy all refund posts for an order into the order_refunds archive table.
-	 * Refunds are shop_order_refunds posts with post_parent = order_id.
-	 *
-	 * @param int $order_id Parent Order ID.
-	 * @throws \Exception If the insert fails.
-	 * @return void
-	 */
-	private function copy_order_refunds( int $order_id ): void {
+     * Copy all refund posts for an order into the order_refunds archive table.
+     * Refunds are shop_order_refunds posts with post_parent = order_id.
+     *
+     * @param int $order_id Parent Order ID.
+     * @throws \Exception If the insert fails.
+     * @return void
+     */
+    private function copy_order_refunds( int $order_id ): void {
 
-		$db         = $this->wpdb;
-		$target_tbl = $this->tables->order_refunds;
-		$source_tbl = $db->posts;
+        $db = $this->wpdb;
 
-		// Clean template using single quotes and isolated double identifier placeholders.
-		$query = 'INSERT IGNORE INTO %i 
-			(ID, post_author, post_date, post_date_gmt, post_content, post_title,
-			post_excerpt, post_status, comment_status, ping_status, post_password,
-			post_name, to_ping, pinged, post_modified, post_modified_gmt,
-			post_content_filtered, post_parent, guid, menu_order, post_type,
-			post_mime_type, comment_count)
-			SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title,
-			post_excerpt, post_status, comment_status, ping_status, post_password,
-			post_name, to_ping, pinged, post_modified, post_modified_gmt,
-			post_content_filtered, post_parent, guid, menu_order, post_type,
-			post_mime_type, comment_count
-			FROM %i 
-			WHERE post_parent = %d 
-			AND post_type = \'shop_order_refund\'';
+        // Use standard %d placeholder for the single $order_id mapping
+        $query = "INSERT INTO {$this->tables->order_refunds} (
+            ID, post_author, post_date, post_date_gmt, post_content, post_title, 
+            post_excerpt, post_status, post_name, post_modified, post_modified_gmt, 
+            post_content_filtered, post_parent, guid, menu_order, post_type, 
+            post_mime_type, comment_count
+        )
+        SELECT 
+            ID, post_author, post_date, post_date_gmt, post_content, post_title, 
+            post_excerpt, post_status, post_name, post_modified, post_modified_gmt, 
+            post_content_filtered, post_parent, guid, menu_order, post_type, 
+            post_mime_type, comment_count
+        FROM {$db->posts}
+        WHERE post_type = 'shop_order_refund' AND post_parent = %d";
 
-		$args = array( $target_tbl, $source_tbl, $order_id );
+        // Prepare the query safely by injecting the single order ID
+        $prepared_sql = $db->prepare( $query, $order_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
+        // Execute the query
+        $result = $db->query( $prepared_sql );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
-
-		if ( false === $result ) {
-			throw new \Exception(
-				"Failed to copy order refunds for order #{$order_id}."
-			);
-		}
-	}
+        if ( false === $result ) {
+            throw new \Exception(
+                "Failed to copy order refunds for order #{$order_id}."
+            );
+        }
+    }
 
 	/**
 	 * Copies all refund meta rows for an order's refund into archive.
@@ -1113,17 +1133,19 @@ class ArchiveHandler {
 			$this->batch_size = $batch_size;
 		}
 
-		$order_ids = $this->get_batch_order_ids( $before_date, $statuses, $from_date );
+		// Capture excluded IDs sent from AJAX/frontend if available to prevent re-fetching skipped items
+		$exclude_ids = isset( $_POST['exclude_ids'] ) ? array_map( 'intval', (array) $_POST['exclude_ids'] ) : array();
+
+		$order_ids = $this->get_batch_order_ids( $before_date, $statuses, $from_date, $exclude_ids );
 
 		$results = array(
-			'processed' => 0,
-			'succeeded' => 0,
-			'skipped'   => 0,
-			'failed'    => 0,
-			'dry_run'   => $dry_run,
-			// Sample of skip reasons for this batch, capped to keep the
-			// AJAX payload small — the JS surfaces these in the summary.
-			'skip_reasons' => array(),
+			'processed'     => 0,
+			'succeeded'     => 0,
+			'skipped'       => 0,
+			'failed'        => 0,
+			'dry_run'       => $dry_run,
+			'skip_reasons'  => array(),
+			'failed_ids'    => array(), // Pass back to frontend so they can be appended to exclude_ids
 		);
 
 		$max_sample_reasons = 5;
@@ -1139,6 +1161,7 @@ class ArchiveHandler {
 					break;
 				case 'skipped':
 					++$results['skipped'];
+					$results['failed_ids'][] = $order_id; // Track to exclude in next fetch round
 					if ( count( $results['skip_reasons'] ) < $max_sample_reasons ) {
 						$results['skip_reasons'][] = array(
 							'order_id' => $order_id,
@@ -1148,6 +1171,7 @@ class ArchiveHandler {
 					break;
 				default:
 					++$results['failed'];
+					$results['failed_ids'][] = $order_id; // Track to exclude in next fetch round
 					break;
 			}
 		}

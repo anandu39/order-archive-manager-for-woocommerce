@@ -314,6 +314,16 @@ class AjaxHandler {
 
 			$result = $this->archive_handler->process_batch( $before_date, $statuses, $dry_run, $batch_size, $from_date );
 
+			// Add has_more so the JS loop knows exactly when to stop.
+			// Dry run rolls back everything — nothing moves — so one pass is always enough.
+			if ( $dry_run ) {
+				$result['has_more'] = false;
+			} else {
+				// Real run: re-query remaining eligible count after the batch.
+				$remaining          = $this->archive_handler->get_total_orders_to_archive( $before_date, $statuses, $from_date );
+				$result['has_more'] = $remaining > 0;
+			}
+
 		} finally {
 			$this->release_lock();
 		}

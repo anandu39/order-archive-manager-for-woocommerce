@@ -17,6 +17,7 @@
         dirty: false,
         totalOrders: 0,
         processedOrders: 0,
+        excludeIds: [],
     };
 
     /**
@@ -63,6 +64,10 @@
             dot.classList.toggle('woam-step-dot--active', n === stepNumber);
             dot.classList.toggle('woam-step-dot--completed', n < stepNumber);
         });
+
+        // Scroll the step wizard into view so the user always sees the new step
+        // without having to manually scroll up from Step 1's tall content.
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     /**
@@ -1377,6 +1382,9 @@
         const skipReasonSamples = [];
         const startTime = Date.now();
 
+        // ─── RESET SYSTEM EXCLUSIONS FOR A NEW START RUN ───
+        state.excludeIds = [];
+
         startBtn.disabled = true;
         progressEl.style.display = 'block';
         summaryEl.innerHTML = '';
@@ -1392,14 +1400,25 @@
         try {
             while (true) {
                 batchCount++;
+                
+                // ─── ATTACH ACCUMULATED EXCLUSIONS TO THE PAYLOAD ───
+                if (state.excludeIds.length > 0) {
+                    payload.exclude_ids = state.excludeIds;
+                } else {
+                    delete payload.exclude_ids;
+                }
+
                 const data = await woamPost(action, payload);
 
                 processed += data.processed;
                 succeeded += data.succeeded;
-                // 'skipped' is new (subscription-protected orders); older
-                // endpoints (restore/delete) won't send it, so default to 0.
                 skipped += data.skipped || 0;
                 failed += data.failed;
+
+                // ─── ACCUMULATE FAILED AND SKIPPED IDS FROM BACKEND ───
+                if (data.failed_ids && Array.isArray(data.failed_ids)) {
+                    state.excludeIds = state.excludeIds.concat(data.failed_ids);
+                }
 
                 if (Array.isArray(data.skip_reasons)) {
                     for (const entry of data.skip_reasons) {
@@ -1447,8 +1466,23 @@
                     </div>
                 `;
 
+                // ─── PRIMARY TERMINATION: server signals nothing remains ───
+                // has_more=false on dry_run (one pass always enough, nothing moved).
+                // has_more=false on real run when remaining eligible count hits zero.
+                if (data.has_more === false) {
+                    break;
+                }
+
+                // Fallback: nothing came back this batch
                 if (data.processed === 0) {
                     break;
+                }
+
+                // ─── ANTI-DEADLOCK TRAP ───
+                // If a batch evaluates elements but moves nothing out of the live view,
+                // and reports no new exclusion IDs, break to prevent an infinite loop.
+                if (data.processed > 0 && data.succeeded === 0 && (!data.failed_ids || data.failed_ids.length === 0)) {
+                    throw new Error('Batch processing paused: Items are failing or being skipped without clearing from memory.');
                 }
             }
 
@@ -1489,6 +1523,24 @@
                 </div>`;
 
             state.dirty = true;
+
+            // ── POST-RUN UI STATE ──────────────────────────────────────────
+            if (payload.dry_run) {
+                // Dry run finished: uncheck the checkbox so clicking Start Archive
+                // again will run the real archive. Leave button label as-is.
+                const dryRunCb = document.getElementById('woam-archive-dry-run');
+                if (dryRunCb) {
+                    dryRunCb.checked = false;
+                    // Trigger a small visual cue so the user notices the change.
+                    dryRunCb.closest('label, .woam-dry-run-row, p')?.classList.add('woam-dry-run-unchecked');
+                }
+            } else if (succeeded > 0) {
+                // Real archive finished successfully: swap button to green shortcut.
+                startBtn.disabled = false;
+                startBtn.style.cssText = 'background:#2ea64a;color:#fff;border-color:#2ea64a;';
+                startBtn.innerHTML = '<span class="dashicons dashicons-archive" style="margin-right:6px;vertical-align:middle;font-size:14px;width:14px;height:14px;"></span> View Archived Orders';
+                startBtn.dataset.archiveDone = '1';
+            }
 
         } catch (err) {
             summaryEl.innerHTML = `<div class="woam-summary woam-summary--error">
@@ -1634,12 +1686,45 @@
         // Back buttons
         container.querySelectorAll('[data-step-back]').forEach(btn => {
             btn.addEventListener('click', () => {
-                setStep(container, parseInt(btn.dataset.stepBack));
+                const targetStep = parseInt(btn.dataset.stepBack);
+                setStep(container, targetStep);
+
+                // Reset Step 3 UI when navigating away from it
+                if (targetStep < 3) {
+                    const progressEl = document.getElementById('woam-archive-progress');
+                    const fillEl     = document.getElementById('woam-archive-progress-fill');
+                    const summaryEl  = document.getElementById('woam-archive-summary');
+                    const startBtn   = document.getElementById('woam-archive-start');
+
+                    if (progressEl) progressEl.style.display = 'none';
+                    if (fillEl)     fillEl.style.width = '0%';
+                    if (summaryEl)  summaryEl.innerHTML = '';
+                    if (startBtn) {
+                        startBtn.disabled = false;
+                        startBtn.style.cssText = '';
+                        startBtn.innerHTML = 'Start Archive';
+                        delete startBtn.dataset.archiveDone;
+                    }
+
+                    // Restore dry-run checkbox to checked (safe default) when going back
+                    const dryRunCb = document.getElementById('woam-archive-dry-run');
+                    if (dryRunCb) {
+                        dryRunCb.checked = true;
+                        dryRunCb.closest('label, .woam-dry-run-row, p')?.classList.remove('woam-dry-run-unchecked');
+                    }
+                }
             });
         });
 
         // Start Archive button
         document.getElementById('woam-archive-start').addEventListener('click', async () => {
+            // If a real archive just completed, act as "View Archived Orders"
+            const startBtn = document.getElementById('woam-archive-start');
+            if (startBtn.dataset.archiveDone === '1') {
+                document.querySelector('.woam-tab[data-tab="archived"]')?.click();
+                return;
+            }
+
             const dryRun = document.getElementById('woam-archive-dry-run').checked;
             const confirmVal = document.getElementById('woam-archive-confirm').value.trim();
             const confirmEl = document.getElementById('woam-archive-confirm-group');

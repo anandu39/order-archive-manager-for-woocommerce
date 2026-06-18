@@ -23,15 +23,22 @@ global $wpdb;
 // Drop all archive tables.
 
 $tables = array(
-	$wpdb->prefix . 'woam_orders',
-	$wpdb->prefix . 'woam_orders_meta',
-	$wpdb->prefix . 'woam_order_items',
-	$wpdb->prefix . 'woam_order_items_meta',
-	$wpdb->prefix . 'woam_order_notes',
-	$wpdb->prefix . 'woam_order_notes_meta',
-	$wpdb->prefix . 'woam_logs',
-	$wpdb->prefix . 'woam_order_refunds',
-	$wpdb->prefix . 'woam_order_refunds_meta',
+    // Current tables
+    $wpdb->prefix . 'woam_orders',
+    $wpdb->prefix . 'woam_orders_meta',
+    $wpdb->prefix . 'woam_order_items',
+    $wpdb->prefix . 'woam_order_items_meta',
+    $wpdb->prefix . 'woam_order_notes',
+    $wpdb->prefix . 'woam_order_notes_meta',
+    $wpdb->prefix . 'woam_logs',
+    $wpdb->prefix . 'woam_order_refunds',
+    $wpdb->prefix . 'woam_order_refunds_meta',
+
+    // Legacy beta tables (created by older versions, clean them up too)
+    $wpdb->prefix . 'woam_orders_archive',
+    $wpdb->prefix . 'woam_orders_meta_archive',
+    $wpdb->prefix . 'woam_order_items_archive',
+    $wpdb->prefix . 'woam_order_itemmeta_archive',
 );
 
 foreach ( $tables as $table ) {

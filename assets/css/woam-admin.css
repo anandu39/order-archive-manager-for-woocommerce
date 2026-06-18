@@ -1393,6 +1393,16 @@ Phase 3: Real-Time Savings Estimator Styles
     transform: translateY(-50%);
 }
 
+/* Briefly highlights the dry-run row after a dry run to signal the checkbox was unchecked */
+.woam-dry-run-unchecked {
+    animation: woam-highlight-pulse 1.5s ease-out;
+}
+
+@keyframes woam-highlight-pulse {
+    0%   { background: #f0ebff; border-radius: 4px; }
+    100% { background: transparent; }
+}
+
 /*--------------------------------------------------------------
 Archived Tab Redesign - Archive Vault
 --------------------------------------------------------------*/
