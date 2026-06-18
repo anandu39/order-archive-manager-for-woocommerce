@@ -69,6 +69,7 @@ class ArchiveHandler {
 	 *
 	 * @param string $before_date Cutoff date (YYYY-MM-DD HH:MM:SS).
 	 * @param array  $statuses    Array of target post statuses.
+	 * @param string $from_date   Optional start date for range queries (YYYY-MM-DD HH:MM:SS).
 	 * @return int Total order count matching criteria.
 	 */
 	public function get_total_orders_to_archive( string $before_date, array $statuses, string $from_date = '' ): int {
@@ -95,10 +96,10 @@ class ArchiveHandler {
 	/**
 	 * Retrieves a batch of order IDs matching the criteria, explicitly excluding specified IDs.
 	 *
-	 * @param string $before_date
-	 * @param array  $statuses
-	 * @param string $from_date
-	 * @param array  $exclude_ids Array of order IDs to ignore (e.g., failed or skipped items).
+	 * @param string $before_date  Cutoff date (YYYY-MM-DD HH:MM:SS).
+	 * @param array  $statuses     Array of target post statuses.
+	 * @param string $from_date    Optional start date for range queries (YYYY-MM-DD HH:MM:SS).
+	 * @param array  $exclude_ids  Array of order IDs to ignore (e.g., failed or skipped items).
 	 * @return array
 	 */
 	public function get_batch_order_ids( string $before_date, array $statuses, string $from_date = '', array $exclude_ids = array() ): array {
@@ -109,7 +110,7 @@ class ArchiveHandler {
 
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		// Build exclusion clause dynamically if there are IDs to ignore
+		// Build exclusion clause dynamically if there are IDs to ignore.
 		$exclude_clause = '';
 		$exclude_params = array();
 		if ( ! empty( $exclude_ids ) ) {
@@ -121,7 +122,7 @@ class ArchiveHandler {
 		if ( ! empty( $from_date ) ) {
 			$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
 
-			// Merge parameters correctly: table, from_date, to_date, statuses, exclusions, limit
+			// Merge parameters: table, from_date, to_date, statuses, exclusions, limit.
 			$params = array_merge(
 				array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ),
 				$statuses,
@@ -131,7 +132,7 @@ class ArchiveHandler {
 		} else {
 			$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
 
-			// Merge parameters correctly: table, before_date, statuses, exclusions, limit
+			// Merge parameters: table, before_date, statuses, exclusions, limit.
 			$params = array_merge(
 				array( $this->wpdb->posts, $before_date ),
 				$statuses,
@@ -163,7 +164,7 @@ class ArchiveHandler {
 	 */
 	private function is_subscription_linked( int $order_id ): bool {
 
-		// If WooCommerce Subscription isn't active skip this completely.
+		// If WooCommerce Subscription is not active, skip this completely.
 		if ( ! class_exists( 'WC_Subscriptions' ) ) {
 			return false;
 		}
@@ -171,6 +172,7 @@ class ArchiveHandler {
 		// Check 1 - is the order a renewal or resubscribe order?
 		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
 		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
 
 		$renewal_meta = $this->wpdb->get_var( $prepared_meta_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -182,6 +184,7 @@ class ArchiveHandler {
 		// Check 2 - does any active subscription have this order as its parent?
 		$query_subs = 'SELECT ID FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' AND post_status IN (\'wc-active\',\'wc-pending-cancel\') LIMIT 1';
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
 		$prepared_subs_sql = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
 
 		$active_subscription = $this->wpdb->get_var( $prepared_subs_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -196,7 +199,7 @@ class ArchiveHandler {
 	 * @return array{is_linked: bool, reason: string, subscription_status: string|null, is_safe: bool}
 	 */
 	private function get_subscription_status( int $order_id ): array {
-		// If WooCommerce Subscriptions isn't active, return not linked.
+		// If WooCommerce Subscriptions is not active, return not linked.
 		if ( ! class_exists( 'WC_Subscriptions' ) ) {
 			return array(
 				'is_linked'           => false,
@@ -207,9 +210,11 @@ class ArchiveHandler {
 		}
 
 		// Check 1 - Is the order a renewal or resubscribe order?
-		$query_meta        = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
+		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
 		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
-		$renewal_meta      = $this->wpdb->get_var( $prepared_meta_sql );
+		$renewal_meta      = $this->wpdb->get_var( $prepared_meta_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		if ( $renewal_meta ) {
 			return array(
@@ -221,9 +226,11 @@ class ArchiveHandler {
 		}
 
 		// Check 2 - Does any subscription have this order as its parent?
-		$query_subs          = 'SELECT post_status FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' LIMIT 1';
+		$query_subs = 'SELECT post_status FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' LIMIT 1';
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
 		$prepared_subs_sql   = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
-		$subscription_status = $this->wpdb->get_var( $prepared_subs_sql );
+		$subscription_status = $this->wpdb->get_var( $prepared_subs_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		if ( $subscription_status ) {
 			// Statuses safe to archive.
@@ -278,26 +285,24 @@ class ArchiveHandler {
 			return array();
 		}
 
-		$status_condition = '';
+		// Build the base SQL and params, then append optional status condition.
+		$sql    = "SELECT p.ID, p.post_status, p.post_date,
+					s.post_status as subscription_status
+				FROM `{$wpdb->posts}` p
+				INNER JOIN `{$wpdb->posts}` s ON s.post_parent = p.ID
+				WHERE p.post_type = 'shop_order'
+				AND s.post_type = 'shop_subscription'";
+		$params = array();
+
 		if ( ! empty( $status_filter ) ) {
-			$status_condition = $wpdb->prepare( ' AND post_status = %s', $status_filter );
+			$sql     .= ' AND s.post_status = %s';
+			$params[] = $status_filter;
 		}
 
-		$results = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT p.ID, p.post_status, p.post_date, 
-						s.post_status as subscription_status
-				FROM %i p
-				INNER JOIN %i s ON s.post_parent = p.ID
-				WHERE p.post_type = 'shop_order'
-				AND s.post_type = 'shop_subscription'
-				{$status_condition}
-				ORDER BY p.post_date DESC
-				LIMIT 100",
-				$wpdb->posts,
-				$wpdb->posts
-			)
-		);
+		$sql .= ' ORDER BY p.post_date DESC LIMIT 100';
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- SQL is built from static strings; placeholders added conditionally.
+		$results = $wpdb->get_results( ! empty( $params ) ? $wpdb->prepare( $sql, $params ) : $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		$orders = array();
 		foreach ( $results as $row ) {
@@ -718,7 +723,7 @@ class ArchiveHandler {
 
 		$db = $this->wpdb;
 
-		// Use standard %d placeholder for the single $order_id mapping
+		// Use standard %d placeholder for the single $order_id mapping.
 		$query = "INSERT INTO {$this->tables->order_refunds} (
             ID, post_author, post_date, post_date_gmt, post_content, post_title, 
             post_excerpt, post_status, post_name, post_modified, post_modified_gmt, 
@@ -733,10 +738,10 @@ class ArchiveHandler {
         FROM {$db->posts}
         WHERE post_type = 'shop_order_refund' AND post_parent = %d";
 
-		// Prepare the query safely by injecting the single order ID
+		// Prepare the query safely by injecting the single order ID.
 		$prepared_sql = $db->prepare( $query, $order_id );
 
-		// Execute the query
+		// Execute the query.
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
@@ -1135,6 +1140,7 @@ class ArchiveHandler {
 	 * @param array<int, string> $statuses    Order statuses to include.
 	 * @param bool               $dry_run     If true, all DB changes are rolled back.
 	 * @param int                $batch_size  Optional custom batch size.
+	 * @param string             $from_date   Optional start date for range-based archiving.
 	 * @return array{processed: int, succeeded: int, failed: int, dry_run: bool}
 	 */
 	public function process_batch( string $before_date, array $statuses, bool $dry_run = false, int $batch_size = 0, string $from_date = '' ): array {
@@ -1142,8 +1148,11 @@ class ArchiveHandler {
 			$this->batch_size = $batch_size;
 		}
 
-		// Capture excluded IDs sent from AJAX/frontend if available to prevent re-fetching skipped items
-		$exclude_ids = isset( $_POST['exclude_ids'] ) ? array_map( 'intval', (array) $_POST['exclude_ids'] ) : array();
+		// Capture excluded IDs sent from AJAX/frontend if available to prevent re-fetching skipped items.
+		$exclude_ids = array();
+		if ( isset( $_POST['exclude_ids'] ) && check_ajax_referer( 'hw_woam_ajax', 'nonce', false ) ) {
+			$exclude_ids = array_map( 'intval', (array) wp_unslash( $_POST['exclude_ids'] ) );
+		}
 
 		$order_ids = $this->get_batch_order_ids( $before_date, $statuses, $from_date, $exclude_ids );
 
@@ -1154,7 +1163,7 @@ class ArchiveHandler {
 			'failed'       => 0,
 			'dry_run'      => $dry_run,
 			'skip_reasons' => array(),
-			'failed_ids'   => array(), // Pass back to frontend so they can be appended to exclude_ids
+			'failed_ids'   => array(), // Pass back to frontend so they can be appended to exclude_ids.
 		);
 
 		$max_sample_reasons = 5;
@@ -1170,7 +1179,7 @@ class ArchiveHandler {
 					break;
 				case 'skipped':
 					++$results['skipped'];
-					$results['failed_ids'][] = $order_id; // Track to exclude in next fetch round
+					$results['failed_ids'][] = $order_id; // Track to exclude in next fetch round.
 					if ( count( $results['skip_reasons'] ) < $max_sample_reasons ) {
 						$results['skip_reasons'][] = array(
 							'order_id' => $order_id,
@@ -1180,7 +1189,7 @@ class ArchiveHandler {
 					break;
 				default:
 					++$results['failed'];
-					$results['failed_ids'][] = $order_id; // Track to exclude in next fetch round
+					$results['failed_ids'][] = $order_id; // Track to exclude in next fetch round.
 					break;
 			}
 		}
