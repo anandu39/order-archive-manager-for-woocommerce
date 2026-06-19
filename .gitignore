@@ -4,3 +4,24 @@ composer.lock
 Thumbs.db
 /.idea/
 /.vscode/
+
+# PHPStan cache
+/.phpstan/
+/phpstan-cache/
+
+# PHPCS cache
+/.phpcs-cache/
+.phpcs-cache
+
+# Node (if you ever add build tools)
+node_modules/
+/dist/
+
+# OS
+*.log
+
+# Build artifacts — never commit the release zip
+/*.zip
+
+# Local build directory (created by release.yml when run locally)
+/build/

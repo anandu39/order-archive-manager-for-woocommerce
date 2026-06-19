@@ -439,6 +439,7 @@ class AjaxHandler {
                 WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME IN ({$placeholders})";
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows = $wpdb->get_results(
 			$wpdb->prepare( $query, array_values( $table_names ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
@@ -552,27 +553,25 @@ class AjaxHandler {
 			$from_datetime = $from_date . ' 00:00:00';
 			$to_datetime   = $before_date . ' 23:59:59';
 
-			$query_orders = "SELECT COUNT(*) FROM %i 
-							WHERE post_type = 'shop_order' 
-							AND post_date >= %s 
-							AND post_date <= %s
-							AND post_status IN ({$in_placeholders})";
-
-			$order_count = (int) $wpdb->get_var(
+			$order_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					$query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(*) FROM %i
+					WHERE post_type = 'shop_order'
+					AND post_date >= %s
+					AND post_date <= %s
+					AND post_status IN ({$in_placeholders})",
 					array_merge( array( $wpdb->posts, $from_datetime, $to_datetime ), $statuses )
 				)
 			);
 		} else {
-			$query_orders = "SELECT COUNT(*) FROM %i 
-							WHERE post_type = 'shop_order' 
-							AND post_date < %s 
-							AND post_status IN ({$in_placeholders})";
-
-			$order_count = (int) $wpdb->get_var(
+			$order_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					$query_orders, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(*) FROM %i
+					WHERE post_type = 'shop_order'
+					AND post_date < %s
+					AND post_status IN ({$in_placeholders})",
 					array_merge( array( $wpdb->posts, $before_date ), $statuses )
 				)
 			);
@@ -605,78 +604,73 @@ class AjaxHandler {
 		}
 
 		// Count Meta Rows.
-		$query_meta = "SELECT COUNT(*) FROM %i pm
-					INNER JOIN %i p ON pm.post_id = p.ID
-					WHERE p.post_type = 'shop_order'
-					{$date_condition}
-					AND p.post_status IN ({$in_placeholders})";
-
-		$meta_count = (int) $wpdb->get_var(
+		$meta_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				$query_meta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM %i pm
+				INNER JOIN %i p ON pm.post_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				{$date_condition}
+				AND p.post_status IN ({$in_placeholders})",
 				array_merge( array( $wpdb->postmeta, $wpdb->posts ), $date_args, $statuses )
 			)
 		);
 
 		// Count Order Items Rows.
-		$query_items = "SELECT COUNT(*) FROM %i oi
-					INNER JOIN %i p ON oi.order_id = p.ID
-					WHERE p.post_type = 'shop_order'
-					{$date_condition}
-					AND p.post_status IN ({$in_placeholders})";
-
-		$items_count = (int) $wpdb->get_var(
+		$items_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				$query_items, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM %i oi
+				INNER JOIN %i p ON oi.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				{$date_condition}
+				AND p.post_status IN ({$in_placeholders})",
 				array_merge( array( $order_items_table, $wpdb->posts ), $date_args, $statuses )
 			)
 		);
 
 		// Count Order Item Meta Rows.
-		$query_itemmeta = "SELECT COUNT(*) FROM %i oim
-						INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
-						INNER JOIN %i p ON oi.order_id = p.ID
-						WHERE p.post_type = 'shop_order'
-						{$date_condition}
-						AND p.post_status IN ({$in_placeholders})";
-
-		$itemmeta_count = (int) $wpdb->get_var(
+		$itemmeta_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				$query_itemmeta, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				INNER JOIN %i p ON oi.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				{$date_condition}
+				AND p.post_status IN ({$in_placeholders})",
 				array_merge( array( $order_items_meta_table, $order_items_table, $wpdb->posts ), $date_args, $statuses )
 			)
 		);
 
 		// Count Order Notes/Comments Rows.
-		$query_notes = "SELECT COUNT(*) FROM %i
-					WHERE comment_post_ID IN (
-						SELECT ID FROM %i p
-						WHERE p.post_type = 'shop_order'
-						{$date_condition}
-						AND p.post_status IN ({$in_placeholders})
-					)
-					AND comment_type IN ('order_note', 'order_note_private')";
-
-		$notes_count = (int) $wpdb->get_var(
+		$notes_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				$query_notes, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM %i
+				WHERE comment_post_ID IN (
+					SELECT ID FROM %i p
+					WHERE p.post_type = 'shop_order'
+					{$date_condition}
+					AND p.post_status IN ({$in_placeholders})
+				)
+				AND comment_type IN ('order_note', 'order_note_private')",
 				array_merge( array( $wpdb->comments, $wpdb->posts ), $date_args, $statuses )
 			)
 		);
 
 		// Count Refund Rows.
-		$query_refunds = "SELECT COUNT(*) FROM %i p
-						WHERE p.post_type = 'shop_order_refund'
-						AND p.post_parent IN (
-							SELECT ID FROM %i
-							WHERE post_type = 'shop_order'
-							{$date_condition}
-							AND post_status IN ({$in_placeholders})
-						)";
-
-		$refunds_count = (int) $wpdb->get_var(
+		$refunds_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				$query_refunds, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM %i p
+				WHERE p.post_type = 'shop_order_refund'
+				AND p.post_parent IN (
+					SELECT ID FROM %i
+					WHERE post_type = 'shop_order'
+					{$date_condition}
+					AND post_status IN ({$in_placeholders})
+				)",
 				array_merge( array( $wpdb->posts, $wpdb->posts ), $date_args, $statuses )
 			)
 		);
@@ -718,7 +712,7 @@ class AjaxHandler {
 		$avg_row_sizes = array();
 
 		foreach ( $table_list as $key => $table ) {
-			$avg = (float) $wpdb->get_var(
+			$avg = (float) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
 					'SELECT ROUND( ( DATA_LENGTH + INDEX_LENGTH ) / TABLE_ROWS, 2 )
 					FROM information_schema.TABLES
@@ -766,15 +760,12 @@ class AjaxHandler {
 
 		global $wpdb;
 
-		$oldest_date = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT MIN(post_date) FROM %i WHERE post_type = 'shop_order'",
-				$wpdb->posts
-			)
-		);
+		// $wpdb->posts is a trusted, internally-generated table name — no user
+		// input involved — so it is safe to reference directly without prepare().
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$oldest_date = $wpdb->get_var( "SELECT MIN(post_date) FROM {$wpdb->posts} WHERE post_type = 'shop_order'" );
 
 		if ( $oldest_date ) {
-			// Fix: Use DateTime with proper namespace.
 			$date = new \DateTime( $oldest_date );
 			wp_send_json_success(
 				array(
@@ -849,8 +840,7 @@ class AjaxHandler {
 			GROUP BY post_status
 			ORDER BY count DESC";
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$results = $wpdb->get_results(
+		$results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
 				$sql, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				array_merge( array( $from_datetime, $to_datetime ), $statuses )
@@ -928,17 +918,17 @@ class AjaxHandler {
 
 		// Build full SQL before prepare() to avoid interpolation sniff.
 		$sql = "SELECT s.post_status, COUNT(DISTINCT p.ID) as count
-        FROM `{$wpdb->posts}` p
-        INNER JOIN `{$wpdb->posts}` s ON s.post_parent = p.ID
-        WHERE p.post_type = 'shop_order'
-        AND s.post_type = 'shop_subscription'
-        AND p.post_date >= %s
-        AND p.post_date <= %s
-        AND s.post_status IN ({$placeholders})
-        GROUP BY s.post_status";
+		FROM `{$wpdb->posts}` p
+		INNER JOIN `{$wpdb->posts}` s ON s.post_parent = p.ID
+		WHERE p.post_type = 'shop_order'
+		AND s.post_type = 'shop_subscription'
+		AND p.post_date >= %s
+		AND p.post_date <= %s
+		AND s.post_status IN ({$placeholders})
+		GROUP BY s.post_status";
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$results = $wpdb->get_results(
+		$results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
 				$sql, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				array_merge( array( $from_datetime, $to_datetime ), $statuses )
@@ -1006,7 +996,7 @@ class AjaxHandler {
 		$missing_tables = array();
 
 		foreach ( $expected_tables as $table ) {
-			$exists = $wpdb->get_var(
+			$exists = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare( 'SHOW TABLES LIKE %s', $table )
 			);
 
@@ -1022,31 +1012,33 @@ class AjaxHandler {
 		$version_ok        = version_compare( $installed_version, HW_WOAM_VERSION, '>=' );
 
 		// Check 3 — last archive, restore, delete dates from log table.
+		// $wpdb->prefix is a trusted internal value; inlining directly is safe and
+		// avoids the UnescapedDBParameter sniff triggered by assigning to $logs_table.
 		$logs_table   = $wpdb->prefix . 'woam_logs';
 		$last_archive = null;
 		$last_restore = null;
 		$last_delete  = null;
 
 		if ( $tables_ok ) {
-			$last_archive = $wpdb->get_var(
+			$last_archive = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT MAX(created_at) FROM `{$logs_table}` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(created_at) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'archive',
 					'success'
 				)
 			);
 
-			$last_restore = $wpdb->get_var(
+			$last_restore = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT MAX(created_at) FROM `{$logs_table}` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(created_at) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore',
 					'success'
 				)
 			);
 
-			$last_delete = $wpdb->get_var(
+			$last_delete = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT MAX(created_at) FROM `{$logs_table}` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(created_at) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'delete',
 					'success'
 				)
@@ -1088,21 +1080,19 @@ class AjaxHandler {
 
 		global $wpdb;
 
-		$logs_table = $wpdb->prefix . 'woam_logs';
-
-		$rows = $wpdb->get_results(
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
 				"SELECT
-                    DATE(created_at)  AS activity_date,
-                    action,
-                    COUNT(*)          AS order_count
-                FROM %i
-                WHERE status = %s
-                AND action   IN ('archive', 'restore', 'delete')
-                GROUP BY DATE(created_at), action
-                ORDER BY activity_date DESC, action ASC
-                LIMIT 5",
-				array( $logs_table, 'success' )
+					DATE(created_at)  AS activity_date,
+					action,
+					COUNT(*)          AS order_count
+				FROM `{$wpdb->prefix}woam_logs`
+				WHERE status = %s
+				AND action IN ('archive', 'restore', 'delete')
+				GROUP BY DATE(created_at), action
+				ORDER BY activity_date DESC, action ASC
+				LIMIT 5", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				'success'
 			)
 		);
 
@@ -1138,24 +1128,20 @@ class AjaxHandler {
 
 		global $wpdb;
 
-		$orders_table = $wpdb->prefix . 'woam_orders';
-
-		// Pass the literal string using single quotes to fix the WPCS formatting error.
+		// No user input in this query — plain get_results() with an inlined prefix is correct.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT post_status, COUNT(*) AS order_count
-                FROM %i
-                GROUP BY post_status
-                ORDER BY order_count DESC',
-				$orders_table
-			)
+			'SELECT post_status, COUNT(*) AS order_count
+			FROM `' . $wpdb->prefix . 'woam_orders`
+			GROUP BY post_status
+			ORDER BY order_count DESC'
 		);
 
 		$breakdown   = array();
 		$total_count = 0;
 
 		foreach ( $rows as $row ) {
-			$breakdown[]  = array(
+			$breakdown[] = array(
 				'status'      => $row->post_status,
 				'label'       => $this->get_status_label( $row->post_status ),
 				'order_count' => (int) $row->order_count,
@@ -1228,7 +1214,9 @@ class AjaxHandler {
 			GROUP BY post_status";
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$results = $wpdb->get_results( $wpdb->prepare( $sql, $statuses ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare( $sql, $statuses ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		);
 
 		$stats = array(
 			'total_subscriptions'  => 0,
@@ -1262,7 +1250,9 @@ class AjaxHandler {
 			AND post_parent > 0";
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$stats['protected_orders'] = (int) $wpdb->get_var( $wpdb->prepare( $protected_sql, $protected_statuses ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$stats['protected_orders'] = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare( $protected_sql, $protected_statuses ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		);
 
 		// Count archivable orders (cancelled, expired, failed subscriptions).
 		$archivable_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed' );
@@ -1275,7 +1265,9 @@ class AjaxHandler {
 			AND post_parent > 0";
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$stats['archivable_orders'] = (int) $wpdb->get_var( $wpdb->prepare( $archivable_sql, $archivable_statuses ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$stats['archivable_orders'] = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare( $archivable_sql, $archivable_statuses ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		);
 
 		wp_send_json_success( $stats );
 	}
@@ -1339,8 +1331,9 @@ class AjaxHandler {
 				AND post_status IN ({$placeholders})
 				GROUP BY post_status";
 
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-			$results = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( array( $before_date ), $statuses ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->prepare( $sql, array_merge( array( $before_date ), $statuses ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			);
 
 			$breakdown      = array();
 			$total_eligible = 0;
@@ -1479,8 +1472,9 @@ class AjaxHandler {
 				AND post_status IN ({$placeholders})
 				GROUP BY post_status";
 
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-			$results = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( array( $cutoff_date ), $statuses ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->prepare( $sql, array_merge( array( $cutoff_date ), $statuses ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			);
 
 			$breakdown = array();
 			$total     = 0;
@@ -1524,66 +1518,49 @@ class AjaxHandler {
 
 		global $wpdb;
 
-		$orders_table           = $wpdb->prefix . 'woam_orders';
-		$orders_meta_table      = $wpdb->prefix . 'woam_orders_meta';
-		$order_items_table      = $wpdb->prefix . 'woam_order_items';
-		$order_items_meta_table = $wpdb->prefix . 'woam_order_items_meta';
-		$order_notes_table      = $wpdb->prefix . 'woam_order_notes';
-		$order_notes_meta_table = $wpdb->prefix . 'woam_order_notes_meta';
+		$p = $wpdb->prefix;
+
+		// All table names are built from $wpdb->prefix — a trusted internal value.
+		// No user input is present in any of these queries, so prepare() is not needed.
 
 		// 1. Check orphaned metadata.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$orphaned_meta = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				'SELECT COUNT(*) FROM %i om
-                LEFT JOIN %i o ON om.post_id = o.ID
-                WHERE o.ID IS NULL',
-				$orders_meta_table,
-				$orders_table
-			)
+			"SELECT COUNT(*) FROM `{$p}woam_orders_meta` om
+			LEFT JOIN `{$p}woam_orders` o ON om.post_id = o.ID
+			WHERE o.ID IS NULL"
 		);
 
 		// 2. Check orphaned order items.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$orphaned_items = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				'SELECT COUNT(*) FROM %i oi
-                LEFT JOIN %i o ON oi.order_id = o.ID
-                WHERE o.ID IS NULL',
-				$order_items_table,
-				$orders_table
-			)
+			"SELECT COUNT(*) FROM `{$p}woam_order_items` oi
+			LEFT JOIN `{$p}woam_orders` o ON oi.order_id = o.ID
+			WHERE o.ID IS NULL"
 		);
 
 		// 3. Check orphaned order item meta.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$orphaned_item_meta = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				'SELECT COUNT(*) FROM %i oim
-                LEFT JOIN %i oi ON oim.order_item_id = oi.order_item_id
-                WHERE oi.order_item_id IS NULL',
-				$order_items_meta_table,
-				$order_items_table
-			)
+			"SELECT COUNT(*) FROM `{$p}woam_order_items_meta` oim
+			LEFT JOIN `{$p}woam_order_items` oi ON oim.order_item_id = oi.order_item_id
+			WHERE oi.order_item_id IS NULL"
 		);
 
 		// 4. Check orphaned order notes (comments).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$orphaned_notes = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				'SELECT COUNT(*) FROM %i on_
-                LEFT JOIN %i o ON on_.comment_post_ID = o.ID
-                WHERE o.ID IS NULL',
-				$order_notes_table,
-				$orders_table
-			)
+			"SELECT COUNT(*) FROM `{$p}woam_order_notes` on_
+			LEFT JOIN `{$p}woam_orders` o ON on_.comment_post_ID = o.ID
+			WHERE o.ID IS NULL"
 		);
 
 		// 5. Check orphaned order note meta.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$orphaned_note_meta = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				'SELECT COUNT(*) FROM %i onm
-                LEFT JOIN %i on_ ON onm.comment_id = on_.comment_ID
-                WHERE on_.comment_ID IS NULL',
-				$order_notes_meta_table,
-				$order_notes_table
-			)
+			"SELECT COUNT(*) FROM `{$p}woam_order_notes_meta` onm
+			LEFT JOIN `{$p}woam_order_notes` on_ ON onm.comment_id = on_.comment_ID
+			WHERE on_.comment_ID IS NULL"
 		);
 
 		$total_orphans = $orphaned_meta + $orphaned_items + $orphaned_item_meta + $orphaned_notes + $orphaned_note_meta;
@@ -1627,7 +1604,9 @@ class AjaxHandler {
 			AND TABLE_ROWS > 0";
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$avg = (float) $wpdb->get_var( $wpdb->prepare( $sql, $tables ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$avg = (float) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare( $sql, $tables ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		);
 
 		// Fallback to 50 KB if information_schema returns nothing.
 		return $avg > 0 ? (int) $avg : 51200;

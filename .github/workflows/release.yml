@@ -42,6 +42,7 @@ jobs:
             --exclude composer.json \
             --exclude composer.lock \
             --exclude phpstan.neon \
+            --exclude phpstan-stubs.php \
             --exclude phpcs.xml.dist \
             --exclude tests \
             --exclude '*.md' \

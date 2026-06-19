@@ -225,9 +225,9 @@ class RestoreHandler {
 		);
 
 		if ( $exists > 0 ) {
-			throw new \Exception(
+			throw new \Exception( esc_html(
 				"Order #{$order_id} already exists in wp_posts. It may not have been fully removed before archiving, or a previous restore partially completed."
-			);
+			));
 		}
 
 		$query = 'INSERT INTO %i (ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_password, post_name, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count) SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_password, post_name, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count FROM %i WHERE ID = %d';
@@ -240,11 +240,11 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore order #{$order_id} to wp_posts. DB error: " . $db->last_error );
+			throw new \Exception( esc_html("Failed to restore order #{$order_id} to wp_posts. DB error: " . $db->last_error ));
 		}
 
 		if ( 0 === $result ) {
-			throw new \Exception( "Order #{$order_id} not found in archive." );
+			throw new \Exception( esc_html ("Order #{$order_id} not found in archive." ));
 		}
 	}
 
@@ -272,7 +272,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore meta for order #{$order_id}." );
+			throw new \Exception( esc_html("Failed to restore meta for order #{$order_id}." ));
 		}
 	}
 
@@ -300,7 +300,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore order items for order #{$order_id}." );
+			throw new \Exception( esc_html("Failed to restore order items for order #{$order_id}." ));
 		}
 	}
 
@@ -331,7 +331,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore order item meta for order #{$order_id}." );
+			throw new \Exception( esc_html("Failed to restore order item meta for order #{$order_id}." ));
 		}
 	}
 
@@ -359,7 +359,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore order notes for order #{$order_id}." );
+			throw new \Exception( esc_html( "Failed to restore order notes for order #{$order_id}." ));
 		}
 	}
 
@@ -390,7 +390,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore order note meta for order #{$order_id}." );
+			throw new \Exception( esc_html ("Failed to restore order note meta for order #{$order_id}." ));
 		}
 	}
 
@@ -418,7 +418,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore refunds for order #{$order_id}." );
+			throw new \Exception( esc_html("Failed to restore refunds for order #{$order_id}." ));
 		}
 	}
 
@@ -447,7 +447,7 @@ class RestoreHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( "Failed to restore refund meta for order #{$order_id}." );
+			throw new \Exception( esc_html("Failed to restore refund meta for order #{$order_id}." ));
 		}
 	}
 
@@ -470,8 +470,8 @@ class RestoreHandler {
 
 		if ( 0 === $exists ) {
 			throw new \Exception(
-				"Restore verification failed for order #{$order_id}: post row not found in wp_posts after INSERT."
-			);
+				esc_html("Restore verification failed for order #{$order_id}: post row not found in wp_posts after INSERT."
+			));
 		}
 	}
 

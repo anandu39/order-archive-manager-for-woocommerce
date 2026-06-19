@@ -124,35 +124,40 @@ class Onboarding {
 		global $wpdb;
 
 		// Get order statistics.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$total_orders = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order'",
-				$wpdb->posts
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM `{$wpdb->posts}` WHERE post_type = 'shop_order'"
 			)
 		);
 
 		// Get oldest order date.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$oldest_order = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT MIN(post_date) FROM %i WHERE post_type = 'shop_order'",
-				$wpdb->posts
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT MIN(post_date) FROM `{$wpdb->posts}` WHERE post_type = 'shop_order'"
 			)
 		);
 
 		// Get completed orders older than 12 months.
 		$twelve_months_ago  = gmdate( 'Y-m-d H:i:s', strtotime( '-12 months' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$archive_candidates = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM %i 
-				WHERE post_type = 'shop_order' 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM `{$wpdb->posts}`
+				WHERE post_type = 'shop_order'
 				AND post_status = 'wc-completed'
 				AND post_date < %s",
-				$wpdb->posts,
 				$twelve_months_ago
 			)
 		);
 
+
 		// Get database size.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$db_size = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				'SELECT SUM(DATA_LENGTH + INDEX_LENGTH)

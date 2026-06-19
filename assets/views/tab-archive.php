@@ -7,8 +7,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-$order_statuses = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array();
-$subscriptions_active = class_exists( 'WC_Subscriptions' );
+$woam_order_statuses = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array();
+$woam_subscriptions_active = class_exists( 'WC_Subscriptions' );
 ?>
 
 <div class="woam-steps" data-mode="archive">
@@ -88,10 +88,10 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
                 <label><?php esc_html_e( 'Order statuses to include', 'woo-order-archive-manager' ); ?></label>
 
                 <div class="woam-checkbox-grid" id="woam-archive-statuses">
-                    <?php foreach ( $order_statuses as $status_key => $status_label ) : ?>
+                    <?php foreach ( $woam_order_statuses as $woam_status_key => $woam_status_label ) : ?>
                     <label class="woam-checkbox">
-                        <input type="checkbox" name="archive_statuses[]" value="<?php echo esc_attr( $status_key ); ?>" />
-                        <?php echo esc_html( $status_label ); ?>
+                        <input type="checkbox" name="archive_statuses[]" value="<?php echo esc_attr( $woam_status_key ); ?>" />
+                        <?php echo esc_html( $woam_status_label ); ?>
                     </label>
                     <?php endforeach; ?>
                 </div>
@@ -103,7 +103,7 @@ $subscriptions_active = class_exists( 'WC_Subscriptions' );
             </p>
         </div>
 
-        <?php if ( $subscriptions_active ) : ?>
+        <?php if ( $woam_subscriptions_active ) : ?>
         <!-- ============================================================ -->
         <!-- SUBSCRIPTION ORDER ANALYSIS - Auto-populated                  -->
         <!-- ============================================================ -->

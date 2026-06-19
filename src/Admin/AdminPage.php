@@ -89,7 +89,7 @@ class AdminPage {
 		// WordPress ships jQuery UI Datepicker CSS via this handle.
 		wp_enqueue_style(
 			'woam-jquery-ui',
-			'//ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.min.css',
+			HW_WOAM_URL . 'assets/css/jquery-ui.min.css',
 			array(),
 			'1.13.2'
 		);
