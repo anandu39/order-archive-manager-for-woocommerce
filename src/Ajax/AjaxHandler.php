@@ -1141,7 +1141,7 @@ class AjaxHandler {
 		$total_count = 0;
 
 		foreach ( $rows as $row ) {
-			$breakdown[] = array(
+			$breakdown[]  = array(
 				'status'      => $row->post_status,
 				'label'       => $this->get_status_label( $row->post_status ),
 				'order_count' => (int) $row->order_count,

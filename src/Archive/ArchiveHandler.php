@@ -349,21 +349,27 @@ class ArchiveHandler {
 		// ---------------------------------------------------------------------
 
 		if ( $archive_meta !== $source_meta ) {
-			throw new \Exception( esc_html (
-				"Archive verification failed for #{$order_id}: meta rows expected {$source_meta}, got {$archive_meta}."
-			));
+			throw new \Exception(
+				esc_html(
+					"Archive verification failed for #{$order_id}: meta rows expected {$source_meta}, got {$archive_meta}."
+				)
+			);
 		}
 
 		if ( $archive_items !== $source_items ) {
-			throw new \Exception( esc_html(
-				"Archive verification failed for #{$order_id}: items rows expected {$source_items}, got {$archive_items}."
-			));
+			throw new \Exception(
+				esc_html(
+					"Archive verification failed for #{$order_id}: items rows expected {$source_items}, got {$archive_items}."
+				)
+			);
 		}
 
 		if ( $archive_item_meta !== $source_item_meta ) {
-			throw new \Exception( esc_html(
-				"Archive verification failed for #{$order_id}: item meta rows expected {$source_item_meta}, got {$archive_item_meta}."
-			));
+			throw new \Exception(
+				esc_html(
+					"Archive verification failed for #{$order_id}: item meta rows expected {$source_item_meta}, got {$archive_item_meta}."
+				)
+			);
 		}
 	}
 
@@ -487,11 +493,11 @@ class ArchiveHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( esc_html ("Failed to copy order #{$order_id} to archive." ));
+			throw new \Exception( esc_html( "Failed to copy order #{$order_id} to archive." ) );
 		}
 
 		if ( 0 === $result ) {
-			throw new \Exception( esc_html ("Order #{$order_id} not found in wp_posts." ));
+			throw new \Exception( esc_html( "Order #{$order_id} not found in wp_posts." ) );
 		}
 	}
 
@@ -519,7 +525,7 @@ class ArchiveHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( esc_html("Failed to copy meta for order #{$order_id}." ));
+			throw new \Exception( esc_html( "Failed to copy meta for order #{$order_id}." ) );
 		}
 	}
 
@@ -548,7 +554,7 @@ class ArchiveHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( esc_html ("Failed to copy order items for order #{$order_id}." ));
+			throw new \Exception( esc_html( "Failed to copy order items for order #{$order_id}." ) );
 		}
 	}
 
@@ -582,7 +588,7 @@ class ArchiveHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( esc_html("Failed to copy order item meta for order #{$order_id}." ));
+			throw new \Exception( esc_html( "Failed to copy order item meta for order #{$order_id}." ) );
 		}
 	}
 
@@ -625,7 +631,7 @@ class ArchiveHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( esc_html("Failed to copy order notes for order #{$order_id}." ));
+			throw new \Exception( esc_html( "Failed to copy order notes for order #{$order_id}." ) );
 		}
 	}
 
@@ -656,7 +662,7 @@ class ArchiveHandler {
 		$result = $db->query( $prepared_sql );
 
 		if ( false === $result ) {
-			throw new \Exception( esc_html("Failed to copy order note meta for order #{$order_id}." ));
+			throw new \Exception( esc_html( "Failed to copy order note meta for order #{$order_id}." ) );
 		}
 	}
 
@@ -695,8 +701,10 @@ class ArchiveHandler {
 
 		if ( false === $result ) {
 			throw new \Exception(
-				esc_html ("Failed to copy order refunds for order #{$order_id}."
-			));
+				esc_html(
+					"Failed to copy order refunds for order #{$order_id}."
+				)
+			);
 		}
 	}
 
@@ -727,8 +735,10 @@ class ArchiveHandler {
 
 		if ( false === $result ) {
 			throw new \Exception(
-				esc_html("Failed to copy refund meta for order #{$order_id}."
-			));
+				esc_html(
+					"Failed to copy refund meta for order #{$order_id}."
+				)
+			);
 		}
 	}
 
