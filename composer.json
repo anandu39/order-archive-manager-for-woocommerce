@@ -1,5 +1,5 @@
 {
-    "name": "hw/woo-order-archive-manager",
+    "name": "hw/order-archive-manager-for-woocommerce",
     "description": "Securely archive WooCommerce orders from live tables into separate archive tables.",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",

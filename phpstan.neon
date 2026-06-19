@@ -4,7 +4,7 @@ parameters:
     paths:
         - src
         - uninstall.php
-        - woo-order-archive-manager.php
+        - order-archive-manager-for-woocommerce.php
 
     excludePaths:
         - vendor/*
@@ -16,5 +16,5 @@ parameters:
     ignoreErrors:
         -
             message: '#If condition is always false#'
-            path: woo-order-archive-manager.php
+            path: order-archive-manager-for-woocommerce.php
             count: 1

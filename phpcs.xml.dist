@@ -35,7 +35,7 @@
 
     <!-- Scan only plugin code -->
     <file>src</file>
-    <file>woo-order-archive-manager.php</file>
+    <file>order-archive-manager-for-woocommerce.php</file>
     <file>uninstall.php</file>
 
     <!-- Exclude dependencies -->

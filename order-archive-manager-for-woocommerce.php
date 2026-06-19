@@ -1,14 +1,14 @@
 <?php
 /**
- * Plugin Name: Woo Order Archive Manager
- * Plugin URI: https://anandu39.github.io/Anandu-Ravikumar/woo-order-archive-manager
+ * Plugin Name: Order Archive Manager for WooCommerce
+ * Plugin URI: https://anandu39.github.io/Anandu-Ravikumar/order-archive-manager-for-woocommerce
  * Description: A plugin to securely archive WooCommerce orders from legacy tables into separate archive custom tables, ensuring data integrity and compliance with data retention policies.
  * Version: 1.0.0
  * Author: Anandu Ravikumar
  * Author URI: https://anandu39.github.io/Anandu-Ravikumar/
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: woo-order-archive-manager
+ * Text Domain: order-archive-manager-for-woocommerce
  * Domain Path: /languages
  * Requires at least: 5.0
  * Tested up to: 7.0
@@ -20,11 +20,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/**
- * PHP version check.
- * Must run before the autoloader — class files use PHP 8.2 syntax
- * and will cause a parse error on older PHP before we can show a notice.
- */
 if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
 
 	add_action(
@@ -33,7 +28,7 @@ if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
 			echo '<div class="notice notice-error"><p>'
 				. sprintf(
 					/* translators: %s: required PHP version */
-					esc_html__( 'Woo Order Archive Manager requires PHP %s or higher. Please upgrade PHP or contact your hosting provider.', 'woo-order-archive-manager' ),
+					esc_html__( 'Order Archive Manager for WooCommerce requires PHP %s or higher. Please upgrade PHP or contact your hosting provider.', 'order-archive-manager-for-woocommerce' ),
 					'8.2'
 				)
 				. '</p></div>';
@@ -60,7 +55,7 @@ if ( ! file_exists( HW_WOAM_PATH . 'vendor/autoload.php' ) ) {
 		'admin_notices',
 		function () {
 			echo '<div class="notice notice-error"><p>'
-				. esc_html__( 'Woo Order Archive Manager: Composer dependencies are missing. Please run composer install in the plugin directory.', 'woo-order-archive-manager' )
+				. esc_html__( 'Order Archive Manager for WooCommerce: Composer dependencies are missing. Please run composer install in the plugin directory.', 'order-archive-manager-for-woocommerce' )
 				. '</p></div>';
 		}
 	);

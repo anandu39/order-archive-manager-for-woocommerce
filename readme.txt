@@ -1,6 +1,6 @@
-=== Woo Order Archive Manager ===
+=== Order Archive Manager for WooCommerce ===
 Contributors: ananduravi
-Tags: woocommerce, orders, archive, database, performance, optimization, cleanup
+Tags: woocommerce, orders, archive, performance, db-optimization
 Requires at least: 5.0
 Tested up to: 7.0
 Requires PHP: 8.2
@@ -14,7 +14,7 @@ Archive old WooCommerce orders into separate database tables to keep your store 
 
 Over time, WooCommerce orders pile up in your database. Every order adds rows to `wp_posts`, `wp_postmeta`, `wp_comments`, and several WooCommerce tables. On stores with tens of thousands of orders, this slows down admin pages, checkout queries, and report generation.
 
-**Woo Order Archive Manager** moves completed, cancelled, or refunded orders out of the live tables and into dedicated archive tables. Your store gets faster, your order data stays safe, and you can restore any order back to WooCommerce whenever you need it.
+**Order Archive Manager for WooCommerce** moves completed, cancelled, or refunded orders out of the live tables and into dedicated archive tables. Your store gets faster, your order data stays safe, and you can restore any order back to WooCommerce whenever you need it.
 
 = How it works =
 
@@ -52,7 +52,7 @@ When an order is archived, the following data moves with it:
 
 **WooCommerce Subscriptions** - Detected automatically. Orders linked to active subscriptions are skipped during archiving to avoid breaking renewal billing.
 
-= Why choose Woo Order Archive Manager? =
+= Why choose Order Archive Manager for WooCommerce? =
 
 Unlike plugins that only change order status or soft-delete orders, this plugin physically moves order data to separate tables. Your live database tables stay lean and fast, while archived data remains fully restorable.
 
@@ -153,7 +153,7 @@ Initial release. No upgrade steps required.
 
 == Support ==
 
-For support, feature requests, or bug reports, please visit the [GitHub repository](https://github.com/anandu39/woo-order-archive-manager).
+For support, feature requests, or bug reports, please visit the [GitHub repository](https://github.com/anandu39/order-archive-manager-for-woocommerce).
 
 == Credits ==
 

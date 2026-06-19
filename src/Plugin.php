@@ -158,7 +158,7 @@ class Plugin {
 		$settings_link = sprintf(
 			'<a href="%s">%s</a>',
 			admin_url( 'admin.php?page=woam-dashboard' ),
-			__( 'Settings', 'woo-order-archive-manager' )
+			__( 'Settings', 'order-archive-manager-for-woocommerce' )
 		);
 
 		// Add settings link at the beginning.
@@ -210,7 +210,7 @@ class Plugin {
 				'admin_notices',
 				function () {
 					echo '<div class="notice notice-warning"><p>'
-						. esc_html__( 'Woo Order Archive Manager: This version supports legacy order storage (post-based orders) only. High-Performance Order Storage (HPOS) support is planned for a future release.', 'woo-order-archive-manager' )
+						. esc_html__( 'Woo Order Archive Manager: This version supports legacy order storage (post-based orders) only. High-Performance Order Storage (HPOS) support is planned for a future release.', 'order-archive-manager-for-woocommerce' )
 						. '</p></div>';
 				}
 			);
@@ -295,7 +295,7 @@ class Plugin {
 			'admin_notices',
 			function () {
 				echo '<div class="notice notice-error"><p>'
-					. esc_html__( 'Woo Order Archive Manager requires WooCommerce to be installed and activated.', 'woo-order-archive-manager' )
+					. esc_html__( 'Woo Order Archive Manager requires WooCommerce to be installed and activated.', 'order-archive-manager-for-woocommerce' )
 					. '</p></div>';
 			}
 		);
@@ -319,16 +319,21 @@ class Plugin {
 	}
 
 	/**
+	/**
 	 * Loads the plugin text domain for translations.
 	 *
 	 * @return void
 	 */
 	private function load_textdomain(): void {
-
-		load_plugin_textdomain(
-			'woo-order-archive-manager',
-			false,
-			dirname( HW_WOAM_BASENAME ) . '/languages'
+		add_action(
+			'init',
+			static function () {
+				load_plugin_textdomain(
+					'order-archive-manager-for-woocommerce',
+					false,
+					dirname( HW_WOAM_BASENAME ) . '/languages'
+				);
+			}
 		);
 	}
 }

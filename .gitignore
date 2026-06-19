@@ -8,6 +8,8 @@ Thumbs.db
 # PHPStan cache
 /.phpstan/
 /phpstan-cache/
+phpstan.neon
+phpstan-stubs.php
 
 # PHPCS cache
 /.phpcs-cache/

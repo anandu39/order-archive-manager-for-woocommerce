@@ -47,8 +47,8 @@ class AdminPage {
 	 */
 	public function register_menu(): void {
 		add_menu_page(
-			__( 'Order Archive Manager', 'woo-order-archive-manager' ),
-			__( 'Order Archive', 'woo-order-archive-manager' ),
+			__( 'Order Archive Manager', 'order-archive-manager-for-woocommerce' ),
+			__( 'Order Archive', 'order-archive-manager-for-woocommerce' ),
 			'manage_woocommerce',
 			self::PAGE_SLUG,
 			array( $this, 'admin_render_page' ),
@@ -101,10 +101,10 @@ class AdminPage {
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'hw_woam_ajax' ),
 				'i18n'    => array(
-					'confirmArchive' => __( 'Type ARCHIVE to confirm', 'woo-order-archive-manager' ),
-					'confirmDelete'  => __( 'Type DELETE to confirm', 'woo-order-archive-manager' ),
-					'jobRunning'     => __( 'Another job is already running, Please wait..', 'woo-order-archive-manager' ),
-					'noOrders'       => __( 'No Orders match the selected filer', 'woo-order-archive-manager' ),
+					'confirmArchive' => __( 'Type ARCHIVE to confirm', 'order-archive-manager-for-woocommerce' ),
+					'confirmDelete'  => __( 'Type DELETE to confirm', 'order-archive-manager-for-woocommerce' ),
+					'jobRunning'     => __( 'Another job is already running, Please wait..', 'order-archive-manager-for-woocommerce' ),
+					'noOrders'       => __( 'No Orders match the selected filer', 'order-archive-manager-for-woocommerce' ),
 				),
 			)
 		);
@@ -123,18 +123,18 @@ class AdminPage {
 
 		<div class="wrap woam-wrap woam-onboarding-ready">
 			<div class="woam-header">
-				<h1><?php esc_html_e( 'Order Archive Manager', 'woo-order-archive-manager' ); ?></h1>
+				<h1><?php esc_html_e( 'Order Archive Manager', 'order-archive-manager-for-woocommerce' ); ?></h1>
 				<div id="woam-opportunity-banner" class="woam-opportunity-banner">
 					<div class="woam-opportunity-banner-content">
 						<div class="woam-opportunity-icon">
 							<span class="dashicons dashicons-chart-line"></span>
 						</div>
 						<div class="woam-opportunity-text">
-							<span id="woam-opportunity-message"><?php esc_html_e( 'Loading database insights...', 'woo-order-archive-manager' ); ?></span>
+							<span id="woam-opportunity-message"><?php esc_html_e( 'Loading database insights...', 'order-archive-manager-for-woocommerce' ); ?></span>
 						</div>
 						<button type="button" class="woam-button woam-button--primary" id="woam-opportunity-cta" style="display: none;">
 							<span class="dashicons dashicons-archive"></span>
-							<?php esc_html_e( 'Review Archive Opportunities', 'woo-order-archive-manager' ); ?>
+							<?php esc_html_e( 'Review Archive Opportunities', 'order-archive-manager-for-woocommerce' ); ?>
 						</button>
 					</div>
 				</div>
@@ -148,7 +148,7 @@ class AdminPage {
 					aria-controls="woam-panel-overview"
 					data-tab="overview"
 				>
-					<?php esc_html_e( 'Overview', 'woo-order-archive-manager' ); ?>
+					<?php esc_html_e( 'Overview', 'order-archive-manager-for-woocommerce' ); ?>
 				</button>
 
 				<button
@@ -158,7 +158,7 @@ class AdminPage {
 					aria-controls="woam-panel-archive"
 					data-tab="archive"
 				>
-					<?php esc_html_e( 'Archive Orders', 'woo-order-archive-manager' ); ?>
+					<?php esc_html_e( 'Archive Orders', 'order-archive-manager-for-woocommerce' ); ?>
 				</button>
 
 				<button
@@ -168,7 +168,7 @@ class AdminPage {
 					aria-controls="woam-panel-archived"
 					data-tab="archived"
 				>
-					<?php esc_html_e( 'Archived Orders', 'woo-order-archive-manager' ); ?>
+					<?php esc_html_e( 'Archived Orders', 'order-archive-manager-for-woocommerce' ); ?>
 				</button>
 			</nav>
 

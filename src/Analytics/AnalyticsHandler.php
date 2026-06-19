@@ -72,37 +72,37 @@ class AnalyticsHandler {
 					'weight'  => 30,
 					'value'   => $db_stats['total_formatted'] ?? '0 B',
 					'message' => $size_score >= 70
-						? __( 'Database size is healthy', 'woo-order-archive-manager' )
-						: __( 'Large database size affecting performance', 'woo-order-archive-manager' ),
+						? __( 'Database size is healthy', 'order-archive-manager-for-woocommerce' )
+						: __( 'Large database size affecting performance', 'order-archive-manager-for-woocommerce' ),
 				),
 				'archive_usage'   => array(
 					'score'   => $archive_score,
 					'weight'  => 25,
 					'value'   => $this->get_archive_percentage() . '% archived',
 					'message' => $archive_score >= 50
-						? __( 'Good archive coverage', 'woo-order-archive-manager' )
-						: __( 'More orders could be archived', 'woo-order-archive-manager' ),
+						? __( 'Good archive coverage', 'order-archive-manager-for-woocommerce' )
+						: __( 'More orders could be archived', 'order-archive-manager-for-woocommerce' ),
 				),
 				'table_integrity' => array(
 					'score'   => $integrity_score,
 					'weight'  => 25,
 					'value'   => sprintf(
 						/* translators: %d: number of orphaned records */
-						_n( '%d orphan', '%d orphans', $total_orphans, 'woo-order-archive-manager' ),
+						_n( '%d orphan', '%d orphans', $total_orphans, 'order-archive-manager-for-woocommerce' ),
 						$total_orphans
 					),
 					'message' => 0 === $total_orphans
-						? __( 'All archive tables are clean', 'woo-order-archive-manager' )
+						? __( 'All archive tables are clean', 'order-archive-manager-for-woocommerce' )
 						/* translators: %d: number of orphaned records */
-						: sprintf( __( 'Found %d orphaned records', 'woo-order-archive-manager' ), $total_orphans ),
+						: sprintf( __( 'Found %d orphaned records', 'order-archive-manager-for-woocommerce' ), $total_orphans ),
 				),
 				'growth_rate'     => array(
 					'score'   => $growth_score,
 					'weight'  => 20,
 					'value'   => $this->format_bytes( $growth_rate * 1024 * 1024 ) . '/month',
 					'message' => $growth_score >= 70
-						? __( 'Database growth is under control', 'woo-order-archive-manager' )
-						: __( 'Database is growing quickly', 'woo-order-archive-manager' ),
+						? __( 'Database growth is under control', 'order-archive-manager-for-woocommerce' )
+						: __( 'Database is growing quickly', 'order-archive-manager-for-woocommerce' ),
 				),
 			),
 		);
@@ -116,11 +116,8 @@ class AnalyticsHandler {
 	public function get_lifetime_stats(): array {
 		global $wpdb;
 
-		$logs_table   = $wpdb->prefix . 'woam_logs';
-		$orders_table = $wpdb->prefix . 'woam_orders';
-
-		$logs_exists   = $this->table_exists( $logs_table );
-		$orders_exists = $this->table_exists( $orders_table );
+		$logs_exists   = $this->table_exists( $wpdb->prefix . 'woam_logs' );
+		$orders_exists = $this->table_exists( $wpdb->prefix . 'woam_orders' );
 
 		$total_archived        = 0;
 		$total_saved_bytes     = 0;
@@ -131,16 +128,14 @@ class AnalyticsHandler {
 		$delete_run_count      = 0;
 
 		if ( $orders_exists ) {
-			$total_archived = (int) $wpdb->get_var(
-				$wpdb->prepare( 'SELECT COUNT(*) FROM %i', $orders_table )
-			);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$total_archived = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}woam_orders`" );
 		}
 
 		if ( $logs_exists ) {
-			$archive_success_count = (int) $wpdb->get_var(
+			$archive_success_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT COUNT(*) FROM %i WHERE action = %s AND status = %s',
-					$logs_table,
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'archive',
 					'success'
 				)
@@ -149,44 +144,39 @@ class AnalyticsHandler {
 			$avg_order_size    = $this->get_average_order_size_bytes();
 			$total_saved_bytes = $archive_success_count * $avg_order_size;
 
-			$restore_success_count = (int) $wpdb->get_var(
+			$restore_success_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT COUNT(*) FROM %i WHERE action = %s AND status = %s',
-					$logs_table,
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore',
 					'success'
 				)
 			);
 
-			$restore_failure_count = (int) $wpdb->get_var(
+			$restore_failure_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT COUNT(*) FROM %i WHERE action = %s AND status = %s',
-					$logs_table,
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore',
 					'error'
 				)
 			);
 
-			$archive_run_count = (int) $wpdb->get_var(
+			$archive_run_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT COUNT(DISTINCT DATE(created_at)) FROM %i WHERE action = %s',
-					$logs_table,
+					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'archive'
 				)
 			);
 
-			$restore_run_count = (int) $wpdb->get_var(
+			$restore_run_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT COUNT(DISTINCT DATE(created_at)) FROM %i WHERE action = %s',
-					$logs_table,
+					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore'
 				)
 			);
 
-			$delete_run_count = (int) $wpdb->get_var(
+			$delete_run_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT COUNT(DISTINCT DATE(created_at)) FROM %i WHERE action = %s',
-					$logs_table,
+					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'delete'
 				)
 			);
@@ -241,10 +231,10 @@ class AnalyticsHandler {
 					$recommended_date  = $month_data->month . '-01';
 					$estimated_savings = (int) ( $month_data->order_count * 50 * 1024 );
 					$confidence        = 'high';
-					$reason            = __( 'Orders from this period are over 12 months old and unlikely to be modified.', 'woo-order-archive-manager' );
+					$reason            = __( 'Orders from this period are over 12 months old and unlikely to be modified.', 'order-archive-manager-for-woocommerce' );
 					$title             = sprintf(
 						/* translators: %s: month and year */
-						__( 'Archive orders from %s', 'woo-order-archive-manager' ),
+						__( 'Archive orders from %s', 'order-archive-manager-for-woocommerce' ),
 						date_i18n( 'F Y', strtotime( $month_data->month . '-01' ) )
 					);
 					break;
@@ -260,10 +250,10 @@ class AnalyticsHandler {
 						$recommended_date  = $month_data->month . '-01';
 						$estimated_savings = (int) ( $month_data->order_count * 50 * 1024 );
 						$confidence        = 'medium';
-						$reason            = __( 'Orders from this period are over 6 months old. Archiving them will improve performance.', 'woo-order-archive-manager' );
+						$reason            = __( 'Orders from this period are over 6 months old. Archiving them will improve performance.', 'order-archive-manager-for-woocommerce' );
 						$title             = sprintf(
 							/* translators: %s: month and year */
-							__( 'Archive orders from %s', 'woo-order-archive-manager' ),
+							__( 'Archive orders from %s', 'order-archive-manager-for-woocommerce' ),
 							date_i18n( 'F Y', strtotime( $month_data->month . '-01' ) )
 						);
 						break;
@@ -276,8 +266,8 @@ class AnalyticsHandler {
 		if ( ! $recommended_date ) {
 			$recommended_date = gmdate( 'Y-m-d', strtotime( '-12 months' ) );
 			$confidence       = 'low';
-			$reason           = __( 'Your store doesn\'t have many old orders. Consider archiving completed orders older than 12 months.', 'woo-order-archive-manager' );
-			$title            = __( 'Archive Completed Orders', 'woo-order-archive-manager' );
+			$reason           = __( 'Your store doesn\'t have many old orders. Consider archiving completed orders older than 12 months.', 'order-archive-manager-for-woocommerce' );
+			$title            = __( 'Archive Completed Orders', 'order-archive-manager-for-woocommerce' );
 		}
 
 		$statuses    = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' );
@@ -301,8 +291,8 @@ class AnalyticsHandler {
 			'reason'                      => $reason,
 			'action_label'                => $order_count > 0
 				/* translators: %d: number of orders to archive */
-				? sprintf( __( 'Archive %d orders', 'woo-order-archive-manager' ), $order_count )
-				: __( 'Review archive settings', 'woo-order-archive-manager' ),
+				? sprintf( __( 'Archive %d orders', 'order-archive-manager-for-woocommerce' ), $order_count )
+				: __( 'Review archive settings', 'order-archive-manager-for-woocommerce' ),
 		);
 	}
 
@@ -345,12 +335,12 @@ class AnalyticsHandler {
 		$tables_ok          = empty( $missing_tables );
 		$readiness_checks[] = array(
 			'check'   => 'archive_tables',
-			'label'   => __( 'Archive tables installed', 'woo-order-archive-manager' ),
+			'label'   => __( 'Archive tables installed', 'order-archive-manager-for-woocommerce' ),
 			'passed'  => $tables_ok,
 			'message' => $tables_ok
-				? __( 'All archive tables exist', 'woo-order-archive-manager' )
+				? __( 'All archive tables exist', 'order-archive-manager-for-woocommerce' )
 				/* translators: %s: list of missing table names */
-				: sprintf( __( 'Missing tables: %s', 'woo-order-archive-manager' ), implode( ', ', $missing_tables ) ),
+				: sprintf( __( 'Missing tables: %s', 'order-archive-manager-for-woocommerce' ), implode( ', ', $missing_tables ) ),
 		);
 
 		if ( ! $tables_ok ) {
@@ -361,11 +351,11 @@ class AnalyticsHandler {
 		$job_running        = (bool) get_transient( self::LOCK_KEY );
 		$readiness_checks[] = array(
 			'check'   => 'no_active_job',
-			'label'   => __( 'No active archive job', 'woo-order-archive-manager' ),
+			'label'   => __( 'No active archive job', 'order-archive-manager-for-woocommerce' ),
 			'passed'  => ! $job_running,
 			'message' => ! $job_running
-				? __( 'No jobs are currently running', 'woo-order-archive-manager' )
-				: __( 'An archive job is currently in progress', 'woo-order-archive-manager' ),
+				? __( 'No jobs are currently running', 'order-archive-manager-for-woocommerce' )
+				: __( 'An archive job is currently in progress', 'order-archive-manager-for-woocommerce' ),
 		);
 
 		if ( $job_running ) {
@@ -377,12 +367,12 @@ class AnalyticsHandler {
 		$integrity_passed   = 0 === $integrity_data['total_orphans'];
 		$readiness_checks[] = array(
 			'check'   => 'data_integrity',
-			'label'   => __( 'Archive data integrity', 'woo-order-archive-manager' ),
+			'label'   => __( 'Archive data integrity', 'order-archive-manager-for-woocommerce' ),
 			'passed'  => $integrity_passed,
 			'message' => $integrity_passed
-				? __( 'No orphaned records found', 'woo-order-archive-manager' )
+				? __( 'No orphaned records found', 'order-archive-manager-for-woocommerce' )
 				/* translators: %d: number of orphaned records */
-				: sprintf( __( 'Found %d orphaned records', 'woo-order-archive-manager' ), $integrity_data['total_orphans'] ),
+				: sprintf( __( 'Found %d orphaned records', 'order-archive-manager-for-woocommerce' ), $integrity_data['total_orphans'] ),
 		);
 
 		if ( ! $integrity_passed ) {
@@ -393,11 +383,11 @@ class AnalyticsHandler {
 		$hpos_enabled       = $this->is_hpos_enabled();
 		$readiness_checks[] = array(
 			'check'   => 'hpos_compatible',
-			'label'   => __( 'HPOS compatibility', 'woo-order-archive-manager' ),
+			'label'   => __( 'HPOS compatibility', 'order-archive-manager-for-woocommerce' ),
 			'passed'  => ! $hpos_enabled,
 			'message' => ! $hpos_enabled
-				? __( 'Legacy order storage is active', 'woo-order-archive-manager' )
-				: __( 'HPOS is not yet supported', 'woo-order-archive-manager' ),
+				? __( 'Legacy order storage is active', 'order-archive-manager-for-woocommerce' )
+				: __( 'HPOS is not yet supported', 'order-archive-manager-for-woocommerce' ),
 		);
 
 		// Check 5: Database version is current.
@@ -405,13 +395,13 @@ class AnalyticsHandler {
 		$version_ok         = version_compare( $installed_version, HW_WOAM_VERSION, '>=' );
 		$readiness_checks[] = array(
 			'check'   => 'db_version',
-			'label'   => __( 'Database schema version', 'woo-order-archive-manager' ),
+			'label'   => __( 'Database schema version', 'order-archive-manager-for-woocommerce' ),
 			'passed'  => $version_ok,
 			'message' => $version_ok
 				/* translators: %s: installed version number */
-				? sprintf( __( 'Version %s (current)', 'woo-order-archive-manager' ), $installed_version )
+				? sprintf( __( 'Version %s (current)', 'order-archive-manager-for-woocommerce' ), $installed_version )
 				/* translators: %1$s: installed version, %2$s: current version */
-				: sprintf( __( 'Version %1$s needs upgrade to %2$s', 'woo-order-archive-manager' ), $installed_version, HW_WOAM_VERSION ),
+				: sprintf( __( 'Version %1$s needs upgrade to %2$s', 'order-archive-manager-for-woocommerce' ), $installed_version, HW_WOAM_VERSION ),
 		);
 
 		if ( ! $version_ok ) {
@@ -423,8 +413,8 @@ class AnalyticsHandler {
 			'checks'      => $readiness_checks,
 			'can_archive' => $tables_ok && ! $job_running && $integrity_passed && $version_ok,
 			'summary'     => $all_passed
-				? __( 'Ready to archive', 'woo-order-archive-manager' )
-				: __( 'Issues detected before archiving', 'woo-order-archive-manager' ),
+				? __( 'Ready to archive', 'order-archive-manager-for-woocommerce' )
+				: __( 'Issues detected before archiving', 'order-archive-manager-for-woocommerce' ),
 		);
 	}
 
@@ -460,7 +450,7 @@ class AnalyticsHandler {
 	private function table_exists( string $table_name ): bool {
 		global $wpdb;
 
-		$result = $wpdb->get_var(
+		$result = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name )
 		);
 
@@ -484,13 +474,12 @@ class AnalyticsHandler {
 
 		$placeholders = implode( ', ', array_fill( 0, count( $table_names ), '%s' ) );
 
-		// Build the query with proper placeholders.
 		$query = "SELECT TABLE_NAME, DATA_LENGTH, INDEX_LENGTH
 			FROM information_schema.TABLES
 			WHERE TABLE_SCHEMA = DATABASE()
 			AND TABLE_NAME IN ({$placeholders})";
 
-		$rows = $wpdb->get_results(
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare( $query, array_values( $table_names ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
 
@@ -531,19 +520,13 @@ class AnalyticsHandler {
 	private function calculate_archive_usage_score(): int {
 		global $wpdb;
 
-		$orders_table      = $wpdb->prefix . 'woam_orders';
-		$live_orders_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order'",
-				$wpdb->posts
-			)
-		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$live_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->posts}` WHERE post_type = 'shop_order'" );
 
 		$archived_orders_count = 0;
-		if ( $this->table_exists( $orders_table ) ) {
-			$archived_orders_count = (int) $wpdb->get_var(
-				$wpdb->prepare( 'SELECT COUNT(*) FROM %i', $orders_table )
-			);
+		if ( $this->table_exists( $wpdb->prefix . 'woam_orders' ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$archived_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}woam_orders`" );
 		}
 
 		$total_orders       = $live_orders_count + $archived_orders_count;
@@ -562,19 +545,13 @@ class AnalyticsHandler {
 	private function get_archive_percentage(): int {
 		global $wpdb;
 
-		$orders_table      = $wpdb->prefix . 'woam_orders';
-		$live_orders_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order'",
-				$wpdb->posts
-			)
-		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$live_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->posts}` WHERE post_type = 'shop_order'" );
 
 		$archived_orders_count = 0;
-		if ( $this->table_exists( $orders_table ) ) {
-			$archived_orders_count = (int) $wpdb->get_var(
-				$wpdb->prepare( 'SELECT COUNT(*) FROM %i', $orders_table )
-			);
+		if ( $this->table_exists( $wpdb->prefix . 'woam_orders' ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$archived_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}woam_orders`" );
 		}
 
 		$total_orders = $live_orders_count + $archived_orders_count;
@@ -592,50 +569,36 @@ class AnalyticsHandler {
 	private function run_quick_integrity_check(): array {
 		global $wpdb;
 
-		$orders_table           = $wpdb->prefix . 'woam_orders';
-		$orders_meta_table      = $wpdb->prefix . 'woam_orders_meta';
-		$order_items_table      = $wpdb->prefix . 'woam_order_items';
-		$order_items_meta_table = $wpdb->prefix . 'woam_order_items_meta';
+		$p = $wpdb->prefix;
 
 		$orphaned_meta      = 0;
 		$orphaned_items     = 0;
 		$orphaned_item_meta = 0;
 
-		$orders_exists = $this->table_exists( $orders_table );
-
-		if ( $orders_exists ) {
+		if ( $this->table_exists( "{$p}woam_orders" ) ) {
 			// Check orphaned meta.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 			$orphaned_meta = (int) $wpdb->get_var(
-				$wpdb->prepare(
-					'SELECT COUNT(*) FROM %i om
-					LEFT JOIN %i o ON om.post_id = o.ID
-					WHERE o.ID IS NULL',
-					$orders_meta_table,
-					$orders_table
-				)
+				"SELECT COUNT(*) FROM `{$p}woam_orders_meta` om
+				LEFT JOIN `{$p}woam_orders` o ON om.post_id = o.ID
+				WHERE o.ID IS NULL"
 			);
 
 			// Check orphaned order items.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 			$orphaned_items = (int) $wpdb->get_var(
-				$wpdb->prepare(
-					'SELECT COUNT(*) FROM %i oi
-					LEFT JOIN %i o ON oi.order_id = o.ID
-					WHERE o.ID IS NULL',
-					$order_items_table,
-					$orders_table
-				)
+				"SELECT COUNT(*) FROM `{$p}woam_order_items` oi
+				LEFT JOIN `{$p}woam_orders` o ON oi.order_id = o.ID
+				WHERE o.ID IS NULL"
 			);
 
 			// Check orphaned item meta if items table exists.
-			if ( 0 === $orphaned_items && $this->table_exists( $order_items_table ) ) {
+			if ( 0 === $orphaned_items && $this->table_exists( "{$p}woam_order_items" ) ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 				$orphaned_item_meta = (int) $wpdb->get_var(
-					$wpdb->prepare(
-						'SELECT COUNT(*) FROM %i oim
-						LEFT JOIN %i oi ON oim.order_item_id = oi.order_item_id
-						WHERE oi.order_item_id IS NULL',
-						$order_items_meta_table,
-						$order_items_table
-					)
+					"SELECT COUNT(*) FROM `{$p}woam_order_items_meta` oim
+					LEFT JOIN `{$p}woam_order_items` oi ON oim.order_item_id = oi.order_item_id
+					WHERE oi.order_item_id IS NULL"
 				);
 			}
 		}
@@ -686,12 +649,8 @@ class AnalyticsHandler {
 	private function get_average_order_size_bytes(): int {
 		global $wpdb;
 
-		$sample_orders = $wpdb->get_col(
-			$wpdb->prepare(
-				'SELECT ID FROM %i WHERE post_type = \'shop_order\' LIMIT 100',
-				$wpdb->posts
-			)
-		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$sample_orders = $wpdb->get_col( "SELECT ID FROM `{$wpdb->posts}` WHERE post_type = 'shop_order' LIMIT 100" );
 
 		if ( empty( $sample_orders ) ) {
 			return 50 * 1024;
@@ -699,26 +658,27 @@ class AnalyticsHandler {
 
 		$order_count  = count( $sample_orders );
 		$placeholders = implode( ', ', array_fill( 0, $order_count, '%d' ) );
-		$meta_bytes   = 0;
-		$post_bytes   = 0;
-		$total_bytes  = 0;
 
 		// Get meta data size.
-		$meta_query = "SELECT SUM(LENGTH(meta_key) + LENGTH(meta_value)) 
-			FROM {$wpdb->postmeta}
-			WHERE post_id IN ({$placeholders})";
-
-		$meta_bytes = (int) $wpdb->get_var(
-			$wpdb->prepare( $meta_query, $sample_orders ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$meta_bytes = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT SUM(LENGTH(meta_key) + LENGTH(meta_value))
+				FROM `{$wpdb->postmeta}`
+				WHERE post_id IN ({$placeholders})",
+				$sample_orders
+			)
 		);
 
 		// Get post data size.
-		$post_query = "SELECT SUM(LENGTH(post_title) + LENGTH(post_content) + LENGTH(post_excerpt))
-			FROM {$wpdb->posts}
-			WHERE ID IN ({$placeholders})";
-
-		$post_bytes = (int) $wpdb->get_var(
-			$wpdb->prepare( $post_query, $sample_orders ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$post_bytes = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT SUM(LENGTH(post_title) + LENGTH(post_content) + LENGTH(post_excerpt))
+				FROM `{$wpdb->posts}`
+				WHERE ID IN ({$placeholders})",
+				$sample_orders
+			)
 		);
 
 		$total_bytes = $meta_bytes + $post_bytes;
@@ -734,23 +694,20 @@ class AnalyticsHandler {
 	private function calculate_archived_revenue(): float {
 		global $wpdb;
 
-		$orders_table      = $wpdb->prefix . 'woam_orders';
-		$orders_meta_table = $wpdb->prefix . 'woam_orders_meta';
+		$p = $wpdb->prefix;
 
-		$tables_exist = $this->table_exists( $orders_table ) && $this->table_exists( $orders_meta_table );
-
-		if ( ! $tables_exist ) {
+		if ( ! $this->table_exists( "{$p}woam_orders" ) || ! $this->table_exists( "{$p}woam_orders_meta" ) ) {
 			return 0.0;
 		}
 
-		$revenue = $wpdb->get_var(
+		$revenue = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				'SELECT SUM(CAST(meta_value AS DECIMAL(10,2)))
-				FROM %i om
-				INNER JOIN %i o ON om.post_id = o.ID
-				WHERE om.meta_key = \'_order_total\'',
-				$orders_meta_table,
-				$orders_table
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT SUM(CAST(meta_value AS DECIMAL(10,2)))
+				FROM `{$p}woam_orders_meta` om
+				INNER JOIN `{$p}woam_orders` o ON om.post_id = o.ID
+				WHERE om.meta_key = %s",
+				'_order_total'
 			)
 		);
 
@@ -765,24 +722,26 @@ class AnalyticsHandler {
 	private function get_monthly_order_distribution(): array {
 		global $wpdb;
 
-		$query = "SELECT 
-			DATE_FORMAT(post_date, '%%Y-%%m') as month,
-			COUNT(*) as order_count,
-			SUM((
-				SELECT meta_value 
-				FROM {$wpdb->postmeta} pm2 
-				WHERE pm2.post_id = p.ID 
-				AND pm2.meta_key = '_order_total' 
-				LIMIT 1
-			)) as total_revenue
-		FROM {$wpdb->posts} p
-		WHERE post_type = 'shop_order'
-		AND post_status IN ('wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed')
-		GROUP BY DATE_FORMAT(post_date, '%%Y-%%m')
-		ORDER BY month DESC
-		LIMIT 24";
-
-		$results = $wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// No user input — $wpdb->posts and $wpdb->postmeta are trusted internal properties.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$results = $wpdb->get_results(
+			"SELECT
+				DATE_FORMAT(post_date, '%Y-%m') as month,
+				COUNT(*) as order_count,
+				SUM((
+					SELECT meta_value
+					FROM `{$wpdb->postmeta}` pm2
+					WHERE pm2.post_id = p.ID
+					AND pm2.meta_key = '_order_total'
+					LIMIT 1
+				)) as total_revenue
+			FROM `{$wpdb->posts}` p
+			WHERE post_type = 'shop_order'
+			AND post_status IN ('wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed')
+			GROUP BY DATE_FORMAT(post_date, '%Y-%m')
+			ORDER BY month DESC
+			LIMIT 24"
+		);
 
 		return is_array( $results ) ? $results : array();
 	}
@@ -799,15 +758,15 @@ class AnalyticsHandler {
 
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		$query = "SELECT COUNT(*) FROM {$wpdb->posts}
-			WHERE post_type = 'shop_order'
-			AND post_date < %s
-			AND post_status IN ({$placeholders})";
-
-		$params = array_merge( array( $before_date ), $statuses );
-
-		return (int) $wpdb->get_var(
-			$wpdb->prepare( $query, $params ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM `{$wpdb->posts}`
+				WHERE post_type = 'shop_order'
+				AND post_date < %s
+				AND post_status IN ({$placeholders})",
+				array_merge( array( $before_date ), $statuses )
+			)
 		);
 	}
 
@@ -887,14 +846,14 @@ class AnalyticsHandler {
 	 */
 	private function get_health_status_label( string $status ): string {
 		$labels = array(
-			'excellent' => __( 'Excellent', 'woo-order-archive-manager' ),
-			'good'      => __( 'Good', 'woo-order-archive-manager' ),
-			'fair'      => __( 'Fair', 'woo-order-archive-manager' ),
-			'poor'      => __( 'Poor', 'woo-order-archive-manager' ),
-			'critical'  => __( 'Critical', 'woo-order-archive-manager' ),
+			'excellent' => __( 'Excellent', 'order-archive-manager-for-woocommerce' ),
+			'good'      => __( 'Good', 'order-archive-manager-for-woocommerce' ),
+			'fair'      => __( 'Fair', 'order-archive-manager-for-woocommerce' ),
+			'poor'      => __( 'Poor', 'order-archive-manager-for-woocommerce' ),
+			'critical'  => __( 'Critical', 'order-archive-manager-for-woocommerce' ),
 		);
 
-		return $labels[ $status ] ?? __( 'Unknown', 'woo-order-archive-manager' );
+		return $labels[ $status ] ?? __( 'Unknown', 'order-archive-manager-for-woocommerce' );
 	}
 
 	/**
@@ -905,11 +864,11 @@ class AnalyticsHandler {
 	 */
 	private function get_confidence_label( string $confidence ): string {
 		$labels = array(
-			'high'   => __( 'High confidence', 'woo-order-archive-manager' ),
-			'medium' => __( 'Medium confidence', 'woo-order-archive-manager' ),
-			'low'    => __( 'Low confidence', 'woo-order-archive-manager' ),
+			'high'   => __( 'High confidence', 'order-archive-manager-for-woocommerce' ),
+			'medium' => __( 'Medium confidence', 'order-archive-manager-for-woocommerce' ),
+			'low'    => __( 'Low confidence', 'order-archive-manager-for-woocommerce' ),
 		);
 
-		return $labels[ $confidence ] ?? __( 'Unknown', 'woo-order-archive-manager' );
+		return $labels[ $confidence ] ?? __( 'Unknown', 'order-archive-manager-for-woocommerce' );
 	}
 }

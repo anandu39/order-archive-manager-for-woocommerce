@@ -120,30 +120,31 @@ class ArchiveHandler {
 		}
 
 		if ( ! empty( $from_date ) ) {
-			$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
+			$query = "SELECT ID FROM `{$this->wpdb->posts}` WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
 
-			// Merge parameters: table, from_date, to_date, statuses, exclusions, limit.
 			$params = array_merge(
-				array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ),
+				array( $from_date . ' 00:00:00', $before_date . ' 23:59:59' ),
 				$statuses,
 				$exclude_params,
 				array( $this->batch_size )
 			);
 		} else {
-			$query = "SELECT ID FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
+			$query = "SELECT ID FROM `{$this->wpdb->posts}` WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders}){$exclude_clause} ORDER BY ID ASC LIMIT %d";
 
-			// Merge parameters: table, before_date, statuses, exclusions, limit.
 			$params = array_merge(
-				array( $this->wpdb->posts, $before_date ),
+				array( $before_date ),
 				$statuses,
 				$exclude_params,
 				array( $this->batch_size )
 			);
 		}
 
-		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		return array_map( 'intval', $this->wpdb->get_col( $prepared_sql ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return array_map( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			'intval',
+			$this->wpdb->get_col( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$this->wpdb->prepare( $query, $params ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			)
+		);
 	}
 
 	/**
@@ -153,7 +154,6 @@ class ArchiveHandler {
 	 * @return array{is_linked: bool, reason: string, subscription_status: string|null, is_safe: bool}
 	 */
 	private function get_subscription_status( int $order_id ): array {
-		// If WooCommerce Subscriptions is not active, return not linked.
 		if ( ! class_exists( 'WC_Subscriptions' ) ) {
 			return array(
 				'is_linked'           => false,
@@ -164,11 +164,12 @@ class ArchiveHandler {
 		}
 
 		// Check 1 - Is the order a renewal or resubscribe order?
-		$query_meta = 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\') LIMIT 1';
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
-		$prepared_meta_sql = $this->wpdb->prepare( $query_meta, array( $this->wpdb->postmeta, $order_id ) );
-		$renewal_meta      = $this->wpdb->get_var( $prepared_meta_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$renewal_meta = $this->wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$this->wpdb->prepare(
+				"SELECT meta_id FROM `{$this->wpdb->postmeta}` WHERE post_id = %d AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe') LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$order_id
+			)
+		);
 
 		if ( $renewal_meta ) {
 			return array(
@@ -180,14 +181,14 @@ class ArchiveHandler {
 		}
 
 		// Check 2 - Does any subscription have this order as its parent?
-		$query_subs = 'SELECT post_status FROM %i WHERE post_parent = %d AND post_type = \'shop_subscription\' LIMIT 1';
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
-		$prepared_subs_sql   = $this->wpdb->prepare( $query_subs, array( $this->wpdb->posts, $order_id ) );
-		$subscription_status = $this->wpdb->get_var( $prepared_subs_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$subscription_status = $this->wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$this->wpdb->prepare(
+				"SELECT post_status FROM `{$this->wpdb->posts}` WHERE post_parent = %d AND post_type = 'shop_subscription' LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$order_id
+			)
+		);
 
 		if ( $subscription_status ) {
-			// Statuses safe to archive.
 			$safe_statuses = array( 'wc-cancelled', 'wc-expired', 'wc-failed', 'wc-trash' );
 
 			if ( in_array( $subscription_status, $safe_statuses, true ) ) {
@@ -228,7 +229,6 @@ class ArchiveHandler {
 			return array();
 		}
 
-		// Build the base SQL and params, then append optional status condition.
 		$sql    = "SELECT p.ID, p.post_status, p.post_date,
 					s.post_status as subscription_status
 				FROM `{$wpdb->posts}` p
@@ -244,8 +244,14 @@ class ArchiveHandler {
 
 		$sql .= ' ORDER BY p.post_date DESC LIMIT 100';
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- SQL is built from static strings; placeholders added conditionally.
-		$results = $wpdb->get_results( ! empty( $params ) ? $wpdb->prepare( $sql, $params ) : $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( ! empty( $params ) ) {
+			$results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->prepare( $sql, $params ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			);
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$results = $wpdb->get_results( $sql );
+		}
 
 		$orders = array();
 		foreach ( $results as $row ) {

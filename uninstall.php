@@ -1,19 +1,17 @@
 <?php
 /**
- *
- * Uninstall handler,
+ * Uninstall handler.
  *
  * Runs when the plugin is deleted from the WordPress plugin screen.
- * Drops all archive tables and remove all plugin options and transcients.
+ * Drops all archive tables and removes all plugin options and transients.
  *
  * This file is executed directly by WordPress - NOT via autoloader.
- * No Classes, no namespaces. Plain procedural PHP only.
+ * No classes, no namespaces. Plain procedural PHP only.
  *
  * @package HW\WOAM
  */
 
-// WordPress call this directly. Exit if accessed outside the context.
-
+// WordPress calls this directly. Exit if accessed outside the context.
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
@@ -21,8 +19,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 global $wpdb;
 
 // Drop all archive tables.
-
-$tables = array(
+$hw_woam_tables = array(
 	// Current tables.
 	$wpdb->prefix . 'woam_orders',
 	$wpdb->prefix . 'woam_orders_meta',
@@ -41,15 +38,14 @@ $tables = array(
 	$wpdb->prefix . 'woam_order_itemmeta_archive',
 );
 
-foreach ( $tables as $table ) {
-	$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+foreach ( $hw_woam_tables as $hw_woam_table ) {
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->query( "DROP TABLE IF EXISTS `{$hw_woam_table}`" );
 }
 
 // Delete plugin options.
-
 delete_option( 'hw_woam_db_version' );
 
 // Delete transients.
-
 delete_option( 'hw_woam_job_running' );
 delete_option( 'hw_woam_order_date_range' );

@@ -191,11 +191,9 @@ class Logger {
 	public function get_count( array $args = array() ): int {
 
 		$where = $this->build_where_clause( $args );
-		$table = $this->tables->logs;
 
-		$sql = "SELECT COUNT(*) FROM `{$table}` {$where}"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-
-		return (int) $this->wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$this->tables->logs}` {$where}" );
 	}
 
 	/**

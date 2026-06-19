@@ -32,8 +32,8 @@ jobs:
 
       - name: Prepare Build Directory
         run: |
-          mkdir -p build/woo-order-archive-manager
-          rsync -av ./ build/woo-order-archive-manager \
+          mkdir -p build/order-archive-manager-for-woocommerce
+          rsync -av ./ build/order-archive-manager-for-woocommerce \
             --exclude build \
             --exclude .git \
             --exclude .github \
@@ -51,7 +51,7 @@ jobs:
       - name: Create ZIP
         run: |
           cd build
-          zip -r WooCommerce-Order-Archive-Manager-${{ github.ref_name }}.zip woo-order-archive-manager
+          zip -r WooCommerce-Order-Archive-Manager-${{ github.ref_name }}.zip order-archive-manager-for-woocommerce
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

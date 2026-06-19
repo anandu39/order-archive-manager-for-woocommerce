@@ -220,7 +220,7 @@ class AjaxHandler {
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_send_json_error(
-				array( 'message' => __( 'You do not have permission to perform this action.', 'woo-order-archive-manager' ) ),
+				array( 'message' => __( 'You do not have permission to perform this action.', 'order-archive-manager-for-woocommerce' ) ),
 				403
 			);
 		}
@@ -236,7 +236,7 @@ class AjaxHandler {
 
 		if ( get_transient( self::LOCK_KEY ) ) {
 			wp_send_json_error(
-				array( 'message' => __( 'Another archive job is already running. Please wait for it to finish.', 'woo-order-archive-manager' ) ),
+				array( 'message' => __( 'Another archive job is already running. Please wait for it to finish.', 'order-archive-manager-for-woocommerce' ) ),
 				409
 			);
 		}
@@ -1293,7 +1293,7 @@ class AjaxHandler {
 		} catch ( \Exception $e ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
 			error_log( 'WOAM Subscription analysis failed: ' . $e->getMessage() );
-			wp_send_json_error( array( 'message' => __( 'Unable to load subscription data.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to load subscription data.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
 
@@ -1366,7 +1366,7 @@ class AjaxHandler {
 		} catch ( \Exception $e ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
 			error_log( 'WOAM Archive preview failed: ' . $e->getMessage() );
-			wp_send_json_error( array( 'message' => __( 'Unable to generate archive preview.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to generate archive preview.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
 
@@ -1397,7 +1397,7 @@ class AjaxHandler {
 					'results' => $results,
 					'message' => sprintf(
 						/* translators: %s: archive type label, either 'before' or 'after'. */
-						__( 'Benchmark completed successfully. Results stored as %s archive.', 'woo-order-archive-manager' ),
+						__( 'Benchmark completed successfully. Results stored as %s archive.', 'order-archive-manager-for-woocommerce' ),
 						$type
 					),
 				)
@@ -1406,7 +1406,7 @@ class AjaxHandler {
 		} catch ( \Exception $e ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
 			error_log( 'WOAM Benchmark failed: ' . $e->getMessage() );
-			wp_send_json_error( array( 'message' => __( 'Unable to run benchmark.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to run benchmark.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
 
@@ -1421,7 +1421,7 @@ class AjaxHandler {
 
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
 				wp_send_json_error(
-					array( 'message' => __( 'You do not have permission to perform this action.', 'woo-order-archive-manager' ) ),
+					array( 'message' => __( 'You do not have permission to perform this action.', 'order-archive-manager-for-woocommerce' ) ),
 					403
 				);
 			}
@@ -1434,7 +1434,7 @@ class AjaxHandler {
 		} catch ( \Exception $e ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
 			error_log( 'WOAM Benchmark comparison failed: ' . $e->getMessage() );
-			wp_send_json_error( array( 'message' => __( 'Unable to load benchmark comparison.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to load benchmark comparison.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
 
@@ -1449,7 +1449,7 @@ class AjaxHandler {
 
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
 				wp_send_json_error(
-					array( 'message' => __( 'You do not have permission to perform this action.', 'woo-order-archive-manager' ) ),
+					array( 'message' => __( 'You do not have permission to perform this action.', 'order-archive-manager-for-woocommerce' ) ),
 					403
 				);
 			}
@@ -1497,7 +1497,7 @@ class AjaxHandler {
 		} catch ( \Exception $e ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
 			error_log( 'WOAM Order breakdown failed: ' . $e->getMessage() );
-			wp_send_json_error( array( 'message' => __( 'Unable to load order breakdown.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Unable to load order breakdown.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
 

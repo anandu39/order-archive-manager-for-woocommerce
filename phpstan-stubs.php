@@ -7,5 +7,5 @@
 
 define( 'HW_WOAM_VERSION', '1.0.0' );
 define( 'HW_WOAM_PATH', __DIR__ . '/' );
-define( 'HW_WOAM_URL', 'https://example.com/wp-content/plugins/woo-order-archive-manager/' );
-define( 'HW_WOAM_BASENAME', 'woo-order-archive-manager/woo-order-archive-manager.php' );
+define( 'HW_WOAM_URL', 'https://example.com/wp-content/plugins/order-archive-manager-for-woocommerce/' );
+define( 'HW_WOAM_BASENAME', 'order-archive-manager-for-woocommerce/order-archive-manager-for-woocommerce.php' );

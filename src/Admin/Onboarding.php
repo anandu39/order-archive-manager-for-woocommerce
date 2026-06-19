@@ -95,15 +95,15 @@ class Onboarding {
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'hw_woam_onboarding' ),
 				'i18n'    => array(
-					'welcomeTitle'   => __( 'Welcome to Order Archive Manager!', 'woo-order-archive-manager' ),
-					'welcomeDesc'    => __( "Let's get your store optimized in less than 2 minutes.", 'woo-order-archive-manager' ),
-					'scanning'       => __( 'Scanning your store...', 'woo-order-archive-manager' ),
-					'analyzing'      => __( 'Analyzing order data...', 'woo-order-archive-manager' ),
-					'preparing'      => __( 'Preparing recommendations...', 'woo-order-archive-manager' ),
-					'skip'           => __( 'Skip Setup', 'woo-order-archive-manager' ),
-					'next'           => __( 'Next', 'woo-order-archive-manager' ),
-					'startArchiving' => __( 'Start Archiving', 'woo-order-archive-manager' ),
-					'gotIt'          => __( 'Got It!', 'woo-order-archive-manager' ),
+					'welcomeTitle'   => __( 'Welcome to Order Archive Manager!', 'order-archive-manager-for-woocommerce' ),
+					'welcomeDesc'    => __( "Let's get your store optimized in less than 2 minutes.", 'order-archive-manager-for-woocommerce' ),
+					'scanning'       => __( 'Scanning your store...', 'order-archive-manager-for-woocommerce' ),
+					'analyzing'      => __( 'Analyzing order data...', 'order-archive-manager-for-woocommerce' ),
+					'preparing'      => __( 'Preparing recommendations...', 'order-archive-manager-for-woocommerce' ),
+					'skip'           => __( 'Skip Setup', 'order-archive-manager-for-woocommerce' ),
+					'next'           => __( 'Next', 'order-archive-manager-for-woocommerce' ),
+					'startArchiving' => __( 'Start Archiving', 'order-archive-manager-for-woocommerce' ),
+					'gotIt'          => __( 'Got It!', 'order-archive-manager-for-woocommerce' ),
 				),
 			)
 		);
@@ -118,7 +118,7 @@ class Onboarding {
 		check_ajax_referer( 'hw_woam_onboarding', 'nonce' );
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 
 		global $wpdb;
@@ -177,7 +177,7 @@ class Onboarding {
 			array(
 				'total_orders'                => $total_orders,
 				'oldest_order_date'           => $oldest_order,
-				'oldest_order_formatted'      => $oldest_order ? date_i18n( get_option( 'date_format' ), strtotime( $oldest_order ) ) : __( 'N/A', 'woo-order-archive-manager' ),
+				'oldest_order_formatted'      => $oldest_order ? date_i18n( get_option( 'date_format' ), strtotime( $oldest_order ) ) : __( 'N/A', 'order-archive-manager-for-woocommerce' ),
 				'archive_candidates'          => $archive_candidates,
 				'db_size_bytes'               => $db_size,
 				'db_size_formatted'           => $this->format_bytes( $db_size ),
@@ -197,7 +197,7 @@ class Onboarding {
 		check_ajax_referer( 'hw_woam_onboarding', 'nonce' );
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'woo-order-archive-manager' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 
 		$skip = isset( $_POST['skip'] ) ? filter_var( wp_unslash( $_POST['skip'] ), FILTER_VALIDATE_BOOLEAN ) : false;
