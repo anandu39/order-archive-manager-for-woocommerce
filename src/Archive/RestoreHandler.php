@@ -465,10 +465,13 @@ class RestoreHandler {
 	 */
 	private function verify_order_post_restored( int $order_id ): void {
 
-		$sql = "SELECT COUNT(*) FROM `{$this->wpdb->posts}` WHERE ID = %d";
+		$posts_table = $this->wpdb->posts;
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query is a static string with no user input.
-		$exists = (int) $this->wpdb->get_var( $this->wpdb->prepare( $sql, $order_id ) );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = (int) $this->wpdb->get_var(
+			$this->wpdb->prepare( "SELECT COUNT(*) FROM `{$posts_table}` WHERE ID = %d", $order_id )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( 0 === $exists ) {
 			throw new \Exception(

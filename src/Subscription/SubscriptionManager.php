@@ -72,21 +72,24 @@ class SubscriptionManager {
 			);
 		}
 
+		$posts_table    = $this->wpdb->posts;
+		$postmeta_table = $this->wpdb->postmeta;
+
 		$statuses     = array_merge( self::PROTECTED_STATUSES, self::SAFE_STATUSES );
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-		$results = $this->wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$results = $this->wpdb->get_results(
 			$this->wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"SELECT post_status, COUNT(*) as count
-				FROM `{$this->wpdb->posts}`
+				FROM `{$posts_table}`
 				WHERE post_type = 'shop_subscription'
 				AND post_status IN ({$placeholders})
 				GROUP BY post_status",
 				$statuses
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$stats = array(
 			'active'         => 0,
@@ -115,38 +118,39 @@ class SubscriptionManager {
 		// Get protected parent orders.
 		$protected_placeholders = implode( ', ', array_fill( 0, count( self::PROTECTED_STATUSES ), '%s' ) );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-		$stats['protected_parent_orders'] = (int) $this->wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$stats['protected_parent_orders'] = (int) $this->wpdb->get_var(
 			$this->wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"SELECT COUNT(DISTINCT post_parent)
-				FROM `{$this->wpdb->posts}`
+				FROM `{$posts_table}`
 				WHERE post_type = 'shop_subscription'
 				AND post_status IN ({$protected_placeholders})
 				AND post_parent > 0",
 				self::PROTECTED_STATUSES
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// Get eligible parent orders (safe to archive).
 		$safe_placeholders = implode( ', ', array_fill( 0, count( self::SAFE_STATUSES ), '%s' ) );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-		$stats['eligible_parent_orders'] = (int) $this->wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$stats['eligible_parent_orders'] = (int) $this->wpdb->get_var(
 			$this->wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"SELECT COUNT(DISTINCT post_parent)
-				FROM `{$this->wpdb->posts}`
+				FROM `{$posts_table}`
 				WHERE post_type = 'shop_subscription'
 				AND post_status IN ({$safe_placeholders})
 				AND post_parent > 0",
 				self::SAFE_STATUSES
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// Get renewal orders — no user input, static query.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$stats['renewal_orders'] = (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$this->wpdb->postmeta}` WHERE meta_key = '_subscription_renewal'" );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$stats['renewal_orders'] = (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$postmeta_table}` WHERE meta_key = '_subscription_renewal'" );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return $stats;
 	}
@@ -162,13 +166,18 @@ class SubscriptionManager {
 			return false;
 		}
 
+		$postmeta_table = $this->wpdb->postmeta;
+		$posts_table    = $this->wpdb->posts;
+
 		// Check if order is a renewal.
-		$is_renewal = (int) $this->wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$is_renewal = (int) $this->wpdb->get_var(
 			$this->wpdb->prepare(
-				"SELECT COUNT(*) FROM `{$this->wpdb->postmeta}` WHERE post_id = %d AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM `{$postmeta_table}` WHERE post_id = %d AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')",
 				$order_id
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( $is_renewal > 0 ) {
 			return true;
@@ -177,14 +186,14 @@ class SubscriptionManager {
 		// Check if any protected subscription has this order as parent.
 		$placeholders = implode( ', ', array_fill( 0, count( self::PROTECTED_STATUSES ), '%s' ) );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.UnfinishedPrepare
-		$has_protected = (int) $this->wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$has_protected = (int) $this->wpdb->get_var(
 			$this->wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				"SELECT COUNT(*) FROM `{$this->wpdb->posts}` WHERE post_parent = %d AND post_type = 'shop_subscription' AND post_status IN ({$placeholders}) LIMIT 1",
+				"SELECT COUNT(*) FROM `{$posts_table}` WHERE post_parent = %d AND post_type = 'shop_subscription' AND post_status IN ({$placeholders}) LIMIT 1",
 				array_merge( array( $order_id ), self::PROTECTED_STATUSES )
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return $has_protected > 0;
 	}
@@ -201,12 +210,14 @@ class SubscriptionManager {
 			return array();
 		}
 
-		$results = $this->wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$posts_table = $this->wpdb->posts;
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$results = $this->wpdb->get_results(
 			$this->wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"SELECT p.ID, p.post_status, p.post_date, s.post_status as subscription_status
-				FROM `{$this->wpdb->posts}` p
-				INNER JOIN `{$this->wpdb->posts}` s ON s.post_parent = p.ID
+				FROM `{$posts_table}` p
+				INNER JOIN `{$posts_table}` s ON s.post_parent = p.ID
 				WHERE p.post_type = 'shop_order'
 				AND s.post_type = 'shop_subscription'
 				AND s.post_status = %s
@@ -216,6 +227,7 @@ class SubscriptionManager {
 				$limit
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$orders = array();
 		foreach ( $results as $row ) {

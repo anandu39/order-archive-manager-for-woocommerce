@@ -190,10 +190,16 @@ class Logger {
 	 */
 	public function get_count( array $args = array() ): int {
 
-		$where = $this->build_where_clause( $args );
+		$logs_table = $this->tables->logs;
+		$where      = $this->build_where_clause( $args );
+		$query      = 'SELECT COUNT(*) FROM `' . $logs_table . '` ' . $where;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$this->tables->logs}` {$where}" );
+		// build_where_clause() returns a sanitized SQL fragment — no raw user input.
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+		$count = (int) $this->wpdb->get_var( $query );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+		return $count;
 	}
 
 	/**

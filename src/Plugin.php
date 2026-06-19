@@ -242,7 +242,6 @@ class Plugin {
 		$this->register_health_cron();
 
 		$this->schema->maybe_upgrade();
-		$this->load_textdomain();
 	}
 
 	/**
@@ -316,24 +315,5 @@ class Plugin {
 		}
 
 		return \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
-	}
-
-	/**
-	/**
-	 * Loads the plugin text domain for translations.
-	 *
-	 * @return void
-	 */
-	private function load_textdomain(): void {
-		add_action(
-			'init',
-			static function () {
-				load_plugin_textdomain(
-					'order-archive-manager-for-woocommerce',
-					false,
-					dirname( HW_WOAM_BASENAME ) . '/languages'
-				);
-			}
-		);
 	}
 }

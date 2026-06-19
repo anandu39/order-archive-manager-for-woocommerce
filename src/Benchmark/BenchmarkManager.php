@@ -55,10 +55,12 @@ class BenchmarkManager {
 	 * @return float Time in milliseconds.
 	 */
 	private function benchmark_order_lookup(): float {
-		$start = microtime( true );
+		$start       = microtime( true );
+		$posts_table = $this->wpdb->posts;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-		$this->wpdb->get_results( "SELECT ID, post_status, post_date FROM `{$this->wpdb->posts}` WHERE post_type = 'shop_order' AND post_status = 'wc-completed' LIMIT 100" );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->wpdb->get_results( "SELECT ID, post_status, post_date FROM `{$posts_table}` WHERE post_type = 'shop_order' AND post_status = 'wc-completed' LIMIT 100" );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -69,14 +71,17 @@ class BenchmarkManager {
 	 * @return float Time in milliseconds.
 	 */
 	private function benchmark_order_search(): float {
-		$start = microtime( true );
+		$start       = microtime( true );
+		$posts_table = $this->wpdb->posts;
 
-		$this->wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->wpdb->get_results(
 			$this->wpdb->prepare(
-				"SELECT ID, post_title, post_date FROM `{$this->wpdb->posts}` WHERE post_type = 'shop_order' AND post_title LIKE %s LIMIT 100", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT ID, post_title, post_date FROM `{$posts_table}` WHERE post_type = 'shop_order' AND post_title LIKE %s LIMIT 100",
 				'%order%'
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -87,10 +92,12 @@ class BenchmarkManager {
 	 * @return float Time in milliseconds.
 	 */
 	private function benchmark_order_meta_query(): float {
-		$start = microtime( true );
+		$start          = microtime( true );
+		$postmeta_table = $this->wpdb->postmeta;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-		$this->wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM `{$this->wpdb->postmeta}` WHERE meta_key = '_order_total' LIMIT 100" );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM `{$postmeta_table}` WHERE meta_key = '_order_total' LIMIT 100" );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -101,10 +108,12 @@ class BenchmarkManager {
 	 * @return float Time in milliseconds.
 	 */
 	private function benchmark_order_item_query(): float {
-		$start = microtime( true );
+		$start  = microtime( true );
+		$prefix = $this->wpdb->prefix;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-		$this->wpdb->get_results( "SELECT order_item_id, order_item_name, order_item_type FROM `{$this->wpdb->prefix}woocommerce_order_items` WHERE order_item_type = 'line_item' LIMIT 100" );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->wpdb->get_results( "SELECT order_item_id, order_item_name, order_item_type FROM `{$prefix}woocommerce_order_items` WHERE order_item_type = 'line_item' LIMIT 100" );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return round( ( microtime( true ) - $start ) * 1000, 2 );
 	}
@@ -115,10 +124,14 @@ class BenchmarkManager {
 	 * @return int
 	 */
 	private function get_order_count(): int {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-		return (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$this->wpdb->posts}` WHERE post_type = 'shop_order'" );
-	}
+		$posts_table = $this->wpdb->posts;
 
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$count = (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$posts_table}` WHERE post_type = 'shop_order'" );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		return $count;
+	}
 	/**
 	 * Get order table size in bytes.
 	 *
