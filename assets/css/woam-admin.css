@@ -2029,6 +2029,12 @@ Missing Styles: Steps, Forms, Tables, Archive/Archived Tabs
     margin-bottom: 24px;
 }
 
+.woam-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 /* ── Individual Steps ── */
 .woam-step {
     display: none;

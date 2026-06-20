@@ -54,7 +54,7 @@
     /**
      * Activates a step within a woam-steps container
      */
-    function setStep(container, stepNumber) {
+    function setStep(container, stepNumber, skipScroll = false) {
         container.querySelectorAll('.woam-step').forEach(step => {
             step.classList.toggle('woam-step--active', parseInt(step.dataset.step) === stepNumber);
         });
@@ -65,9 +65,9 @@
             dot.classList.toggle('woam-step-dot--completed', n < stepNumber);
         });
 
-        // Scroll the step wizard into view so the user always sees the new step
-        // without having to manually scroll up from Step 1's tall content.
-        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (!skipScroll) {
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 
     /**
@@ -1382,6 +1382,10 @@
         const skipReasonSamples = [];
         const startTime = Date.now();
 
+        // Stamp this run so a tab-switch reset can invalidate it.
+        const runId = Symbol();
+        summaryEl.dataset.woamRunId = runId.toString();
+
         // ─── RESET SYSTEM EXCLUSIONS FOR A NEW START RUN ───
         state.excludeIds = [];
 
@@ -1510,6 +1514,9 @@
                     </div>`;
             }
 
+            // If the wizard was reset while this batch was running, discard the result.
+            if (summaryEl.dataset.woamRunId !== runId.toString()) return;
+
             summaryEl.innerHTML = `
                 <div class="woam-summary woam-summary--${failed > 0 ? 'warn' : 'ok'}">
                     <div>
@@ -1544,12 +1551,111 @@
             }
 
         } catch (err) {
-            summaryEl.innerHTML = `<div class="woam-summary woam-summary--error">
-                <p>${escHtml(err.message)}</p>
-            </div>`;
+            if (summaryEl.dataset.woamRunId === runId.toString()) {
+                summaryEl.innerHTML = `<div class="woam-summary woam-summary--error">
+                    <p>${escHtml(err.message)}</p>
+                </div>`;
+            }
         } finally {
             startBtn.disabled = false;
         }
+    }
+
+    /**
+     * Resets the Archive tab wizard back to Step 1 with a clean slate.
+     * Called whenever the Archive tab is opened, including after a
+     * completed archive run, so stale results never linger.
+     */
+    function resetArchiveWizard() {
+        const container = document.querySelector('.woam-steps[data-mode="archive"]');
+        if (!container) return;
+
+        setStep(container, 1, true);
+
+        const impactEl = document.getElementById('woam-archive-impact');
+        if (impactEl) {
+            impactEl.classList.add('woam-loading');
+            impactEl.innerHTML = 'Calculating…';
+        }
+
+        const step2NextBtn = document.getElementById('woam-archive-step2-next');
+        if (step2NextBtn) step2NextBtn.disabled = true;
+
+        const progressEl = document.getElementById('woam-archive-progress');
+        const fillEl = document.getElementById('woam-archive-progress-fill');
+        const summaryEl = document.getElementById('woam-archive-summary');
+        const startBtn = document.getElementById('woam-archive-start');
+        const confirmGroup = document.getElementById('woam-archive-confirm-group');
+        const confirmInput = document.getElementById('woam-archive-confirm');
+        const dryRunCb = document.getElementById('woam-archive-dry-run');
+
+        if (progressEl) progressEl.style.display = 'none';
+        if (fillEl) fillEl.style.width = '0%';
+        if (summaryEl) summaryEl.innerHTML = '';
+        if (summaryEl) delete summaryEl.dataset.woamRunId;
+        if (confirmInput) confirmInput.value = '';
+
+        if (dryRunCb) {
+            dryRunCb.checked = true;
+            dryRunCb.closest('label, .woam-dry-run-row, p')?.classList.remove('woam-dry-run-unchecked');
+        }
+        if (confirmGroup) confirmGroup.style.display = 'none';
+
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.style.cssText = '';
+            startBtn.innerHTML = 'Start Archive';
+            delete startBtn.dataset.archiveDone;
+        }
+
+        state.totalOrders = 0;
+        state.excludeIds = [];
+    }
+
+    /**
+     * Resets the Archived tab wizard back to Step 1 with a clean slate.
+     * Called whenever the Archived tab is opened, including after a
+     * completed restore/delete run, so stale results never linger.
+     */
+    function resetArchivedWizard() {
+        const container = document.querySelector('.woam-steps[data-mode="archived"]');
+        if (!container) return;
+
+        setStep(container, 1, true);
+
+        const impactEl = document.getElementById('woam-archived-impact');
+        if (impactEl) {
+            impactEl.classList.add('woam-loading');
+            impactEl.innerHTML = 'Calculating…';
+        }
+
+        const step2NextBtn = document.getElementById('woam-archived-step2-next');
+        if (step2NextBtn) step2NextBtn.disabled = true;
+
+        const progressEl = document.getElementById('woam-archived-progress');
+        const fillEl = document.getElementById('woam-archived-progress-fill');
+        const summaryEl = document.getElementById('woam-archived-summary');
+        const startBtn = document.getElementById('woam-archived-start');
+        const confirmGroup = document.getElementById('woam-archived-confirm-group');
+        const confirmInput = document.getElementById('woam-archived-confirm');
+        const dryRunCb = document.getElementById('woam-archived-dry-run');
+
+        if (progressEl) progressEl.style.display = 'none';
+        if (fillEl) fillEl.style.width = '0%';
+        if (summaryEl) summaryEl.innerHTML = '';
+        if (summaryEl) delete summaryEl.dataset.woamRunId;
+        if (confirmInput) confirmInput.value = '';
+        if (confirmGroup) confirmGroup.style.display = 'none';
+
+        if (dryRunCb) dryRunCb.checked = true;
+
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Start Restore';
+        }
+
+        state.totalOrders = 0;
+        state.excludeIds = [];
     }
 
     /**
@@ -1564,6 +1670,21 @@
 
         // Initialize bulk selectors
         initBulkSelectors();
+
+        // Toggle confirm field visibility whenever the dry-run checkbox changes.
+        // Without this, the confirm field stays hidden after a dry run completes
+        // (since it auto-unchecks dry-run), blocking the user from typing ARCHIVE.
+        const archiveDryRunCb = document.getElementById('woam-archive-dry-run');
+        const archiveConfirmGroup = document.getElementById('woam-archive-confirm-group');
+
+        if (archiveDryRunCb && archiveConfirmGroup) {
+            archiveDryRunCb.addEventListener('change', () => {
+                archiveConfirmGroup.style.display = archiveDryRunCb.checked ? 'none' : 'block';
+                if (archiveDryRunCb.checked) {
+                    document.getElementById('woam-archive-confirm').value = '';
+                }
+            });
+        }
 
         // Apply recommendation from Overview tab
         applyRecommendationFromStorage();
@@ -1625,8 +1746,13 @@
             }
 
             const impactEl = document.getElementById('woam-archive-impact');
+            const step2NextBtn = document.getElementById('woam-archive-step2-next');
+
             impactEl.classList.add('woam-loading');
             impactEl.innerHTML = 'Calculating…';
+
+            // Disable Continue until the data has actually loaded.
+            if (step2NextBtn) step2NextBtn.disabled = true;
 
             setStep(container, 2);
 
@@ -1640,6 +1766,7 @@
                 if (data.order_count === 0) {
                     impactEl.classList.remove('woam-loading');
                     impactEl.innerHTML = '<p>No orders match the selected filters.</p>';
+                    // Leave Continue disabled — there's nothing to archive.
                     return;
                 }
 
@@ -1673,6 +1800,9 @@
                             <strong>${escHtml(data.estimated_size)} <em>(approximate)</em></strong>
                         </div>
                     </div>`;
+
+                    // Data has loaded successfully — safe to continue now.
+                    if (step2NextBtn) step2NextBtn.disabled = false;
 
             } catch (err) {
                 showError(impactEl, err.message);
@@ -2163,8 +2293,12 @@
             ).map(cb => cb.value);
 
             const impactEl = document.getElementById('woam-archived-impact');
+            const step2NextBtn = document.getElementById('woam-archived-step2-next');
+
             impactEl.classList.add('woam-loading');
             impactEl.innerHTML = 'Calculating…';
+
+            if (step2NextBtn) step2NextBtn.disabled = true;
 
             setStep(container, 2);
 
@@ -2196,6 +2330,7 @@
                         ? '<div class="woam-warning-message"><span class="dashicons dashicons-warning"></span> This action is permanent and cannot be undone.</div>'
                         : '<div class="woam-info-message"><span class="dashicons dashicons-info"></span> Orders will be moved back to live WooCommerce tables.</div>'
                     }`;
+                if (step2NextBtn) step2NextBtn.disabled = false;
 
             } catch (err) {
                 showError(impactEl, err.message);
@@ -2243,6 +2378,7 @@
                 confirmEl: null,
             });
 
+            resetArchivedWizard();
             await loadArchivedTab();
         });
 
@@ -2340,7 +2476,10 @@
                 if (target === 'overview') {
                     loadOverviewTab();
                 } else if (target === 'archived') {
+                    resetArchivedWizard();
                     loadArchivedTab();
+                } else if (target === 'archive') {
+                    resetArchiveWizard();
                 }
             });
         });
@@ -2378,6 +2517,8 @@
         loadOverviewTab();
         initArchiveTab();
         initArchivedTab();
+        resetArchiveWizard();
+        resetArchivedWizard();
     });
 
 })();
