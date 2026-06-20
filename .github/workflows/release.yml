@@ -19,7 +19,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '7.4'
+          php-version: '8.2'
 
       - name: Install Production Dependencies
         run: composer install --no-dev --optimize-autoloader
@@ -67,7 +67,7 @@ jobs:
             ### Requirements
             - WordPress 5.0+
             - WooCommerce (latest recommended)
-            - PHP 7.4+
+            - PHP 8.2+
             - MySQL with InnoDB engine
           files: build/WooCommerce-Order-Archive-Manager-${{ github.ref_name }}.zip
           draft: false

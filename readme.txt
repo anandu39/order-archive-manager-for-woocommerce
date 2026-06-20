@@ -3,7 +3,7 @@ Contributors: ananduravi
 Tags: woocommerce, orders, archive, performance, db-optimization
 Requires at least: 5.0
 Tested up to: 7.0
-Requires PHP: 7.4
+Requires PHP: 8.2
 Stable tag: 1.0.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -72,7 +72,7 @@ Developed by a WooCommerce expert focused on database optimization and performan
 
 * WordPress 5.0 or higher
 * WooCommerce (latest recommended)
-* PHP 7.4 or higher
+* PHP 8.2 or higher
 * MySQL with InnoDB table engine (required for transaction support)
 
 == Frequently Asked Questions ==

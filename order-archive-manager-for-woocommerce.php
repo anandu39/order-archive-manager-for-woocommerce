@@ -12,7 +12,7 @@
  * Domain Path: /languages
  * Requires at least: 5.0
  * Tested up to: 7.0
- * Requires PHP: 7.4
+ * Requires PHP: 8.2
  * Requires Plugins: woocommerce
  *
  * @package HW\WOAM
@@ -20,7 +20,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
+if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
 
 	add_action(
 		'admin_notices',
@@ -29,7 +29,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
 				. sprintf(
 					/* translators: %s: required PHP version */
 					esc_html__( 'Order Archive Manager for WooCommerce requires PHP %s or higher. Please upgrade PHP or contact your hosting provider.', 'order-archive-manager-for-woocommerce' ),
-					'7.4'
+					'8.2'
 				)
 				. '</p></div>';
 		}
