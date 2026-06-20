@@ -43,7 +43,7 @@
     <exclude-pattern>node_modules/*</exclude-pattern>
     <exclude-pattern>assets/views/*</exclude-pattern>
 
-    <!-- PHP 8.2 minimum -->
-    <config name="testVersion" value="8.2-"/>
+    <!-- PHP 7.4 minimum -->
+    <config name="testVersion" value="7.4-"/>
 
 </ruleset>

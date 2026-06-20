@@ -20,7 +20,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
+if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
 
 	add_action(
 		'admin_notices',
@@ -29,7 +29,7 @@ if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
 				. sprintf(
 					/* translators: %s: required PHP version */
 					esc_html__( 'Order Archive Manager for WooCommerce requires PHP %s or higher. Please upgrade PHP or contact your hosting provider.', 'order-archive-manager-for-woocommerce' ),
-					'8.2'
+					'7.4'
 				)
 				. '</p></div>';
 		}
