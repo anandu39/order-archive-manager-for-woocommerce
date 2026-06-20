@@ -104,7 +104,7 @@ class AdminPage {
 					'confirmArchive' => __( 'Type ARCHIVE to confirm', 'order-archive-manager-for-woocommerce' ),
 					'confirmDelete'  => __( 'Type DELETE to confirm', 'order-archive-manager-for-woocommerce' ),
 					'jobRunning'     => __( 'Another job is already running, Please wait..', 'order-archive-manager-for-woocommerce' ),
-					'noOrders'       => __( 'No Orders match the selected filer', 'order-archive-manager-for-woocommerce' ),
+					'noOrders'       => __( 'No Orders match the selected filter', 'order-archive-manager-for-woocommerce' ),
 				),
 			)
 		);

@@ -24,7 +24,7 @@ class Tables {
 	 *
 	 * @var string
 	 */
-	public  string $orders;
+	public string $orders;
 
 	/**
 	 * Archived order meta table.
@@ -32,7 +32,7 @@ class Tables {
 	 *
 	 * @var string
 	 */
-	public  string $orders_meta;
+	public string $orders_meta;
 
 	/**
 	 * Archived order items table.
@@ -40,7 +40,7 @@ class Tables {
 	 *
 	 * @var string
 	 */
-	public  string $order_items;
+	public string $order_items;
 
 	/**
 	 * Archived order item meta table.
@@ -48,7 +48,7 @@ class Tables {
 	 *
 	 * @var string
 	 */
-	public  string $order_items_meta;
+	public string $order_items_meta;
 
 	/**
 	 * Activity log table.
@@ -57,7 +57,7 @@ class Tables {
 	 * @var string
 	 */
 
-	public  string $logs;
+	public string $logs;
 
 	/**
 	 *
@@ -67,7 +67,7 @@ class Tables {
 	 * @var string
 	 */
 
-	public  string $order_notes;
+	public string $order_notes;
 
 	/**
 	 *
@@ -77,7 +77,7 @@ class Tables {
 	 * @var string
 	 */
 
-	public  string $order_notes_meta;
+	public string $order_notes_meta;
 
 	/**
 	 *
@@ -87,7 +87,7 @@ class Tables {
 	 * @var string
 	 */
 
-	public  string $order_refunds;
+	public string $order_refunds;
 
 	/**
 	 *
@@ -97,7 +97,7 @@ class Tables {
 	 * @var string
 	 */
 
-	public  string $order_refunds_meta;
+	public string $order_refunds_meta;
 
 	/**
 	 * Constructor.
