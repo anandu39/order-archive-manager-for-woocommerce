@@ -1,9 +1,9 @@
 === Order Archive Manager for WooCommerce ===
 Contributors: ananduravi
 Tags: woocommerce, orders, archive, performance, db-optimization
-Requires at least: 5.0
+Requires at least: 6.0
 Tested up to: 7.0
-Requires PHP: 8.2
+Requires PHP: 8.0
 Stable tag: 1.0.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -70,9 +70,9 @@ Developed by a WooCommerce expert focused on database optimization and performan
 
 = Requirements =
 
-* WordPress 5.0 or higher
+* WordPress 6.0 or higher
 * WooCommerce (latest recommended)
-* PHP 8.2 or higher
+* PHP 8.0 or higher
 * MySQL with InnoDB table engine (required for transaction support)
 
 == Frequently Asked Questions ==

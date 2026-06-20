@@ -10,9 +10,9 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: order-archive-manager-for-woocommerce
  * Domain Path: /languages
- * Requires at least: 5.0
+ * Requires at least: 6.0
  * Tested up to: 7.0
- * Requires PHP: 8.2
+ * Requires PHP: 8.0
  * Requires Plugins: woocommerce
  *
  * @package HW\WOAM
@@ -20,7 +20,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
+if ( version_compare( PHP_VERSION, '8.0', '<' ) ) {
 
 	add_action(
 		'admin_notices',
@@ -29,7 +29,7 @@ if ( version_compare( PHP_VERSION, '8.2', '<' ) ) {
 				. sprintf(
 					/* translators: %s: required PHP version */
 					esc_html__( 'Order Archive Manager for WooCommerce requires PHP %s or higher. Please upgrade PHP or contact your hosting provider.', 'order-archive-manager-for-woocommerce' ),
-					'8.2'
+					'8.0'
 				)
 				. '</p></div>';
 		}
