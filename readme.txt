@@ -72,7 +72,7 @@ Developed by a WooCommerce expert focused on database optimization and performan
 
 * WordPress 5.0 or higher
 * WooCommerce (latest recommended)
-* PHP 8.2 or higher
+* PHP 7.4 or higher
 * MySQL with InnoDB table engine (required for transaction support)
 
 == Frequently Asked Questions ==

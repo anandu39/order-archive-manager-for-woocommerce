@@ -2327,7 +2327,7 @@
                         </div>
                     </div>
                     ${action === 'delete'
-                        ? '<div class="woam-warning-message"><span class="dashicons dashicons-warning"></span> This action is permanent and cannot be undone.</div>'
+                        ? '<div class="woam-warning-message"><span class="dashicons dashicons-warning"></span> This action is permanent and cannot be undone. Permanently deleted orders cannot be restored. All associated order meta, including data from third-party plugins will be removed.</div>'
                         : '<div class="woam-info-message"><span class="dashicons dashicons-info"></span> Orders will be moved back to live WooCommerce tables.</div>'
                     }`;
                 if (step2NextBtn) step2NextBtn.disabled = false;

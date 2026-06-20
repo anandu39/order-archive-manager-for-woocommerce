@@ -1334,8 +1334,6 @@ class AjaxHandler {
 			wp_send_json_success( $data );
 
 		} catch ( \Exception $e ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
-			error_log( 'WOAM Subscription analysis failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to load subscription data.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
@@ -1407,8 +1405,6 @@ class AjaxHandler {
 			);
 
 		} catch ( \Exception $e ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
-			error_log( 'WOAM Archive preview failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to generate archive preview.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
@@ -1447,8 +1443,6 @@ class AjaxHandler {
 			);
 
 		} catch ( \Exception $e ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
-			error_log( 'WOAM Benchmark failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to run benchmark.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
@@ -1475,8 +1469,6 @@ class AjaxHandler {
 			wp_send_json_success( $comparison );
 
 		} catch ( \Exception $e ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
-			error_log( 'WOAM Benchmark comparison failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to load benchmark comparison.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
@@ -1538,8 +1530,6 @@ class AjaxHandler {
 			);
 
 		} catch ( \Exception $e ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional error logging for plugin diagnostics.
-			error_log( 'WOAM Order breakdown failed: ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => __( 'Unable to load order breakdown.', 'order-archive-manager-for-woocommerce' ) ) );
 		}
 	}
