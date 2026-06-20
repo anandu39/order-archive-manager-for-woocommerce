@@ -3,7 +3,7 @@ name: Build Release Package
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
 
 permissions:
   contents: write
@@ -65,9 +65,9 @@ jobs:
             3. Upload the ZIP and activate
 
             ### Requirements
-            - WordPress 6.0+
+            - WordPress 5.0+
             - WooCommerce (latest recommended)
-            - PHP 8.2+
+            - PHP 7.4+
             - MySQL with InnoDB engine
           files: build/WooCommerce-Order-Archive-Manager-${{ github.ref_name }}.zip
           draft: false
