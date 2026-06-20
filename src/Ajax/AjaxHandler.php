@@ -517,7 +517,7 @@ class AjaxHandler {
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_send_json_error(
-				array( 'message' => __( 'You do not have permission to perform this action.', 'woo-order-archive-manager' ) ),
+				array( 'message' => __( 'You do not have permission to perform this action.', 'order-archive-manager-for-woocommerce' ) ),
 				403
 			);
 		}
