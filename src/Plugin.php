@@ -207,15 +207,17 @@ class Plugin {
 
 		if ( $this->is_hpos_enabled() ) {
 			add_action(
-				'admin_notices',
+				'after_plugin_row_' . HW_WOAM_BASENAME,
 				function () {
-					$screen = get_current_screen();
-					if ( ! $screen || 'plugins' !== $screen->id ) {
-						return;
-					}
-					echo '<div class="notice notice-warning is-dismissible"><p>'
-						. esc_html__( 'Woo Order Archive Manager: This version supports legacy order storage (post-based orders) only. High-Performance Order Storage (HPOS) support is planned for a future release.', 'order-archive-manager-for-woocommerce' )
-						. '</p></div>';
+					echo '<tr class="plugin-update-tr active">
+							<td colspan="4" class="plugin-update colspanchange">
+								<div class="notice notice-warning notice-alt inline">
+									<p>'
+										. esc_html__( 'Woo Order Archive Manager requires legacy order storage (post-based orders). Please disable High-Performance Order Storage (HPOS) in WooCommerce → Settings → Advanced to use this plugin.', 'order-archive-manager-for-woocommerce' )
+									. '</p>
+								</div>
+							</td>
+						</tr>';
 				}
 			);
 			return;
