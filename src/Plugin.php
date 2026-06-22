@@ -210,10 +210,10 @@ class Plugin {
 				'after_plugin_row_' . HW_WOAM_BASENAME,
 				function () {
 					echo '<tr class="plugin-update-tr active">
-							<td colspan="4" class="plugin-update colspanchange" style="border-left: 3px solid #dba617; padding: 0;">
-								<div style="display: flex; align-items: flex-start; gap: 8px; padding: 10px 15px; background: #fff8e5;">
-									<span class="dashicons dashicons-warning" style="color: #dba617; margin-top: 1px; flex-shrink: 0;"></span>
-									<p style="margin: 0; padding: 0;">'
+							<td colspan="4" class="plugin-update colspanchange">
+								<div class="update-message notice inline notice-warning notice-alt">
+									<p>
+										<span class="dashicons dashicons-warning" style="color: #dba617; vertical-align: middle; margin-right: 6px;"></span>'
 										. esc_html__( 'Woo Order Archive Manager requires legacy order storage (post-based orders). Please disable High-Performance Order Storage (HPOS) in WooCommerce → Settings → Advanced to use this plugin.', 'order-archive-manager-for-woocommerce' )
 									. '</p>
 								</div>
