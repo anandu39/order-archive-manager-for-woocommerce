@@ -209,7 +209,11 @@ class Plugin {
 			add_action(
 				'admin_notices',
 				function () {
-					echo '<div class="notice notice-warning"><p>'
+					$screen = get_current_screen();
+					if ( ! $screen || 'plugins' !== $screen->id ) {
+						return;
+					}
+					echo '<div class="notice notice-warning is-dismissible"><p>'
 						. esc_html__( 'Woo Order Archive Manager: This version supports legacy order storage (post-based orders) only. High-Performance Order Storage (HPOS) support is planned for a future release.', 'order-archive-manager-for-woocommerce' )
 						. '</p></div>';
 				}
