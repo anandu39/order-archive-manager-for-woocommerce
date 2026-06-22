@@ -206,21 +206,46 @@ class Plugin {
 		add_filter( 'plugin_action_links_' . HW_WOAM_BASENAME, array( $this, 'add_settings_link' ) );
 
 		if ( $this->is_hpos_enabled() ) {
+
 			add_action(
 				'after_plugin_row_' . HW_WOAM_BASENAME,
 				function () {
-					echo '<tr class="plugin-update-tr active">
-							<td colspan="4" class="plugin-update colspanchange">
-								<div class="update-message notice inline notice-warning notice-alt">
-									<p>
-										<span class="dashicons dashicons-warning" style="color: #dba617; vertical-align: middle; margin-right: 6px;"></span>'
-										. esc_html__( 'Woo Order Archive Manager requires legacy order storage (post-based orders). Please disable High-Performance Order Storage (HPOS) in WooCommerce → Settings → Advanced to use this plugin.', 'order-archive-manager-for-woocommerce' )
-									. '</p>
-								</div>
-							</td>
-						</tr>';
+					?>
+					<tr class="plugin-update-tr hw-woam-plugin-notice active" id="<?php echo esc_attr( sanitize_title( HW_WOAM_BASENAME ) ); ?>-notice">
+						<td colspan="4" class="plugin-update colspanchange">
+							<div class="notice inline notice-warning notice-alt">
+								<p>
+									<span class="dashicons dashicons-warning"></span>
+									<strong>
+										<?php esc_html_e( 'Order Archive Manager for WooCommerce is unavailable.', 'order-archive-manager-for-woocommerce' ); ?>
+									</strong>
+								</p>
+
+								<p>
+									<?php
+									printf(
+										wp_kses(
+											/* translators: %s: Legacy Order Storage. */
+											__( 'This plugin requires <strong>%s</strong>. High-Performance Order Storage (HPOS) is currently enabled.', 'order-archive-manager-for-woocommerce' ),
+											array(
+												'strong' => array(),
+											)
+										),
+										esc_html__( 'Legacy Order Storage', 'order-archive-manager-for-woocommerce' )
+									);
+									?>
+								</p>
+
+								<p>
+									<?php esc_html_e( 'To use this plugin, navigate to WooCommerce → Settings → Advanced → Features, disable High-Performance Order Storage (HPOS), and reload this page.', 'order-archive-manager-for-woocommerce' ); ?>
+								</p>
+							</div>
+						</td>
+					</tr>
+					<?php
 				}
 			);
+
 			return;
 		}
 
