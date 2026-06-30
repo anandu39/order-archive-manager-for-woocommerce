@@ -74,8 +74,8 @@
             <div class="woam-onboarding-modal">
                 <div class="woam-onboarding-header">
                     <span class="dashicons dashicons-archive"></span>
-                    <h2>${woamOnboarding.i18n.welcomeTitle}</h2>
-                    <p>${woamOnboarding.i18n.welcomeDesc}</p>
+                    <h2>${hwWoamOnboarding.i18n.welcomeTitle}</h2>
+                    <p>${hwWoamOnboarding.i18n.welcomeDesc}</p>
                 </div>
                 <div class="woam-onboarding-body">
                     <div class="woam-onboarding-steps">
@@ -97,7 +97,7 @@
                     <div id="woam-onboarding-step1" class="woam-onboarding-step-content active">
                         <div class="woam-scan-animation">
                             <span class="dashicons dashicons-update woam-scan-icon spin"></span>
-                            <div class="woam-scan-text">${woamOnboarding.i18n.scanning}</div>
+                            <div class="woam-scan-text">${hwWoamOnboarding.i18n.scanning}</div>
                             <div class="woam-scan-subtext">Analyzing your WooCommerce store...</div>
                             <div class="woam-scan-progress">
                                 <div class="woam-scan-progress-bar">
@@ -115,9 +115,9 @@
                     </div>
                 </div>
                 <div class="woam-onboarding-footer">
-                    <a href="#" class="woam-skip-link" data-skip>${woamOnboarding.i18n.skip}</a>
+                    <a href="#" class="woam-skip-link" data-skip>${hwWoamOnboarding.i18n.skip}</a>
                     <button type="button" class="woam-button woam-button--primary" id="woam-onboarding-next" disabled>
-                        ${woamOnboarding.i18n.next}
+                        ${hwWoamOnboarding.i18n.next}
                     </button>
                 </div>
             </div>
@@ -150,11 +150,11 @@
         const scanSubtext = document.querySelector('.woam-scan-subtext');
         
         const steps = [
-            { progress: 20, text: woamOnboarding.i18n.scanning, subtext: 'Checking database tables...' },
-            { progress: 40, text: woamOnboarding.i18n.scanning, subtext: 'Analyzing order data...' },
-            { progress: 60, text: woamOnboarding.i18n.analyzing, subtext: 'Calculating potential savings...' },
-            { progress: 80, text: woamOnboarding.i18n.analyzing, subtext: 'Generating recommendations...' },
-            { progress: 100, text: woamOnboarding.i18n.preparing, subtext: 'Almost ready...' }
+            { progress: 20, text: hwWoamOnboarding.i18n.scanning, subtext: 'Checking database tables...' },
+            { progress: 40, text: hwWoamOnboarding.i18n.scanning, subtext: 'Analyzing order data...' },
+            { progress: 60, text: hwWoamOnboarding.i18n.analyzing, subtext: 'Calculating potential savings...' },
+            { progress: 80, text: hwWoamOnboarding.i18n.analyzing, subtext: 'Generating recommendations...' },
+            { progress: 100, text: hwWoamOnboarding.i18n.preparing, subtext: 'Almost ready...' }
         ];
         
         for (const step of steps) {
@@ -182,7 +182,7 @@
      */
     async function fetchScanData() {
         try {
-            const response = await fetch(woamOnboarding.ajaxUrl, {
+            const response = await fetch(hwWoamOnboarding.ajaxUrl, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -190,7 +190,7 @@
                 },
                 body: new URLSearchParams({
                     action: 'hw_woam_run_initial_scan',
-                    nonce: woamOnboarding.nonce,
+                    nonce: hwWoamOnboarding.nonce,
                 })
             });
             
@@ -373,7 +373,7 @@
             // Update button text for last step
             if (currentStep === 3) {
                 const hasOldOrders = scanData && scanData.has_old_orders;
-                nextBtn.textContent = hasOldOrders ? woamOnboarding.i18n.startArchiving : woamOnboarding.i18n.gotIt;
+                nextBtn.textContent = hasOldOrders ? hwWoamOnboarding.i18n.startArchiving : hwWoamOnboarding.i18n.gotIt;
             }
         } else {
             // Complete onboarding
@@ -387,7 +387,7 @@
     async function completeOnboarding() {
         // Mark onboarding as completed
         try {
-            await fetch(woamOnboarding.ajaxUrl, {
+            await fetch(hwWoamOnboarding.ajaxUrl, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -395,7 +395,7 @@
                 },
                 body: new URLSearchParams({
                     action: 'hw_woam_dismiss_onboarding',
-                    nonce: woamOnboarding.nonce,
+                    nonce: hwWoamOnboarding.nonce,
                     skip: '0'
                 })
             });
@@ -425,7 +425,7 @@
         event.preventDefault();
         
         try {
-            await fetch(woamOnboarding.ajaxUrl, {
+            await fetch(hwWoamOnboarding.ajaxUrl, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -433,7 +433,7 @@
                 },
                 body: new URLSearchParams({
                     action: 'hw_woam_dismiss_onboarding',
-                    nonce: woamOnboarding.nonce,
+                    nonce: hwWoamOnboarding.nonce,
                     skip: '1'
                 })
             });

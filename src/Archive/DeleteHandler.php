@@ -186,7 +186,7 @@ class DeleteHandler {
 
 	/**
 	 * Deletes order note meta from the archive notes meta table.
-	 * Must run before delete_order_notes(). It depends on woam_order_notes
+	 * Must run before delete_order_notes(). It depends on hw_woam_order_notes
 	 * still containing the comment_post_ID link.
 	 *
 	 * @param int $order_id Order ID whose note meta should be deleted.
@@ -233,7 +233,7 @@ class DeleteHandler {
 
 	/**
 	 * Deletes order item meta from the archive item meta table.
-	 * Must run before delete_order_items(). It depends on woam_order_items
+	 * Must run before delete_order_items(). It depends on hw_woam_order_items
 	 * still containing the order_id link.
 	 *
 	 * @param int $order_id Order ID whose item meta should be deleted.
@@ -302,7 +302,7 @@ class DeleteHandler {
 
 	/**
 	 * Deletes refund meta from the archive refunds meta table.
-	 * Must run before delete_order_refunds(). It depends on woam_order_refunds
+	 * Must run before delete_order_refunds(). It depends on hw_woam_order_refunds
 	 * still containing the post_parent link.
 	 *
 	 * @param int $order_id Parent order ID.

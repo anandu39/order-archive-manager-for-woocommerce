@@ -74,14 +74,14 @@ class Onboarding {
 		}
 
 		wp_enqueue_style(
-			'woam-onboarding',
+			'hw-woam-onboarding',
 			HW_WOAM_URL . 'assets/css/woam-onboarding.css',
 			array(),
 			HW_WOAM_VERSION
 		);
 
 		wp_enqueue_script(
-			'woam-onboarding',
+			'hw-woam-onboarding',
 			HW_WOAM_URL . 'assets/js/woam-onboarding.js',
 			array(),
 			HW_WOAM_VERSION,
@@ -89,8 +89,8 @@ class Onboarding {
 		);
 
 		wp_localize_script(
-			'woam-onboarding',
-			'woamOnboarding',
+			'hw-woam-onboarding',
+			'hwWoamOnboarding',
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'hw_woam_onboarding' ),

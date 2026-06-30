@@ -107,7 +107,7 @@ class Tables {
 	 */
 	public function __construct( \wpdb $wpdb ) {
 
-		$prefix = $wpdb->prefix . 'woam_';
+		$prefix = $wpdb->prefix . 'hw_woam_';
 
 		$this->orders           = $prefix . 'orders';
 		$this->orders_meta      = $prefix . 'orders_meta';

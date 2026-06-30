@@ -1027,13 +1027,13 @@ class AjaxHandler {
 
 		// Check 1 — all archive tables exist.
 		$expected_tables = array(
-			$wpdb->prefix . 'woam_orders',
-			$wpdb->prefix . 'woam_orders_meta',
-			$wpdb->prefix . 'woam_order_items',
-			$wpdb->prefix . 'woam_order_items_meta',
-			$wpdb->prefix . 'woam_logs',
-			$wpdb->prefix . 'woam_order_notes',
-			$wpdb->prefix . 'woam_order_notes_meta',
+			$wpdb->prefix . 'hw_woam_orders',
+			$wpdb->prefix . 'hw_woam_orders_meta',
+			$wpdb->prefix . 'hw_woam_order_items',
+			$wpdb->prefix . 'hw_woam_order_items_meta',
+			$wpdb->prefix . 'hw_woam_logs',
+			$wpdb->prefix . 'hw_woam_order_notes',
+			$wpdb->prefix . 'hw_woam_order_notes_meta',
 		);
 
 		$missing_tables = array();
@@ -1057,7 +1057,7 @@ class AjaxHandler {
 		// Check 3 — last archive, restore, delete dates from log table.
 		// $wpdb->prefix is a trusted internal value; inlining directly is safe and
 		// avoids the UnescapedDBParameter sniff triggered by assigning to $logs_table.
-		$logs_table   = $wpdb->prefix . 'woam_logs';
+		$logs_table   = $wpdb->prefix . 'hw_woam_logs';
 		$last_archive = null;
 		$last_restore = null;
 		$last_delete  = null;
@@ -1065,7 +1065,7 @@ class AjaxHandler {
 		if ( $tables_ok ) {
 			$last_archive = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT MAX(created_at) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(created_at) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'archive',
 					'success'
 				)
@@ -1073,7 +1073,7 @@ class AjaxHandler {
 
 			$last_restore = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT MAX(created_at) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(created_at) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore',
 					'success'
 				)
@@ -1081,7 +1081,7 @@ class AjaxHandler {
 
 			$last_delete = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT MAX(created_at) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(created_at) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'delete',
 					'success'
 				)
@@ -1129,7 +1129,7 @@ class AjaxHandler {
 					DATE(created_at)  AS activity_date,
 					action,
 					COUNT(*)          AS order_count
-				FROM `{$wpdb->prefix}woam_logs`
+				FROM `{$wpdb->prefix}hw_woam_logs`
 				WHERE status = %s
 				AND action IN ('archive', 'restore', 'delete')
 				GROUP BY DATE(created_at), action
@@ -1175,7 +1175,7 @@ class AjaxHandler {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_results(
 			'SELECT post_status, COUNT(*) AS order_count
-			FROM `' . $wpdb->prefix . 'woam_orders`
+			FROM `' . $wpdb->prefix . 'hw_woam_orders`
 			GROUP BY post_status
 			ORDER BY order_count DESC'
 		);
@@ -1536,7 +1536,7 @@ class AjaxHandler {
 
 	/**
 	 * Checks the archive tables for orphaned rows — meta, items, or notes
-	 * that reference an order ID no longer present in woam_orders.
+	 * that reference an order ID no longer present in hw_woam_orders.
 	 *
 	 * This should normally return zero orphans since all operations run
 	 * inside transactions. Provided as a diagnostic tool for the admin.
@@ -1559,8 +1559,8 @@ class AjaxHandler {
 		// 1. Check orphaned metadata.
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$orphaned_meta = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$p}woam_orders_meta` om
-			LEFT JOIN `{$p}woam_orders` o ON om.post_id = o.ID
+			"SELECT COUNT(*) FROM `{$p}hw_woam_orders_meta` om
+			LEFT JOIN `{$p}hw_woam_orders` o ON om.post_id = o.ID
 			WHERE o.ID IS NULL"
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -1568,8 +1568,8 @@ class AjaxHandler {
 		// 2. Check orphaned order items.
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$orphaned_items = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$p}woam_order_items` oi
-			LEFT JOIN `{$p}woam_orders` o ON oi.order_id = o.ID
+			"SELECT COUNT(*) FROM `{$p}hw_woam_order_items` oi
+			LEFT JOIN `{$p}hw_woam_orders` o ON oi.order_id = o.ID
 			WHERE o.ID IS NULL"
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -1577,8 +1577,8 @@ class AjaxHandler {
 		// 3. Check orphaned order item meta.
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$orphaned_item_meta = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$p}woam_order_items_meta` oim
-			LEFT JOIN `{$p}woam_order_items` oi ON oim.order_item_id = oi.order_item_id
+			"SELECT COUNT(*) FROM `{$p}hw_woam_order_items_meta` oim
+			LEFT JOIN `{$p}hw_woam_order_items` oi ON oim.order_item_id = oi.order_item_id
 			WHERE oi.order_item_id IS NULL"
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -1586,8 +1586,8 @@ class AjaxHandler {
 		// 4. Check orphaned order notes (comments).
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$orphaned_notes = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$p}woam_order_notes` on_
-			LEFT JOIN `{$p}woam_orders` o ON on_.comment_post_ID = o.ID
+			"SELECT COUNT(*) FROM `{$p}hw_woam_order_notes` on_
+			LEFT JOIN `{$p}hw_woam_orders` o ON on_.comment_post_ID = o.ID
 			WHERE o.ID IS NULL"
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -1595,8 +1595,8 @@ class AjaxHandler {
 		// 5. Check orphaned order note meta.
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$orphaned_note_meta = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM `{$p}woam_order_notes_meta` onm
-			LEFT JOIN `{$p}woam_order_notes` on_ ON onm.comment_id = on_.comment_ID
+			"SELECT COUNT(*) FROM `{$p}hw_woam_order_notes_meta` onm
+			LEFT JOIN `{$p}hw_woam_order_notes` on_ ON onm.comment_id = on_.comment_ID
 			WHERE on_.comment_ID IS NULL"
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching

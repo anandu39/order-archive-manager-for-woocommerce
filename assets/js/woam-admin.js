@@ -2,7 +2,7 @@
  * Woo Order Archive Manager — Admin JS
  *
  * Drives all three tab panels via AJAX.
- * Depends on woamData (ajaxUrl, nonce, i18n) provided by wp_localize_script.
+ * Depends on hwWoamData (ajaxUrl, nonce, i18n) provided by wp_localize_script.
  * 
  * Phase 2: Complete Overview Tab with Dashicons + Archive/Archived Tab functionality
  */
@@ -26,7 +26,7 @@
     async function woamPost(action, payload = {}) {
         const body = new FormData();
         body.append('action', action);
-        body.append('nonce', woamData.nonce);
+        body.append('nonce', hwWoamData.nonce);
 
         for (const [key, value] of Object.entries(payload)) {
             if (Array.isArray(value)) {
@@ -36,7 +36,7 @@
             }
         }
 
-        const response = await fetch(woamData.ajaxUrl, {
+        const response = await fetch(hwWoamData.ajaxUrl, {
             method: 'POST',
             credentials: 'same-origin',
             body,
@@ -337,7 +337,7 @@
                         <div class="woam-empty-state-icon">
                             <span class="dashicons dashicons-yes-alt"></span>
                         </div>
-                        <h3>${escHtml(woamData.i18n.noRecommendations || 'Your archive is in great shape!')}</h3>
+                        <h3>${escHtml(hwWoamData.i18n.noRecommendations || 'Your archive is in great shape!')}</h3>
                         <p>${escHtml(data.reason)}</p>
                     </div>
                 `;
@@ -406,12 +406,12 @@
      * Apply a recommendation by pre-filling archive tab
      */
     function applyRecommendation(recommendation) {
-        sessionStorage.setItem('woam_recommendation', JSON.stringify({
+        sessionStorage.setItem('hw_woam_recommendation', JSON.stringify({
             date: recommendation.recommended_date,
             statuses: recommendation.recommended_statuses || ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed']
         }));
         
-        sessionStorage.setItem('woam_recommendation_applied', 'true');
+        sessionStorage.setItem('hw_woam_recommendation_applied', 'true');
         
         const archiveTab = document.querySelector('.woam-tab[data-tab="archive"]');
         if (archiveTab) {
@@ -1305,7 +1305,7 @@
      * Apply recommendation from Overview tab
      */
     function applyRecommendationFromStorage() {
-        const savedRec = sessionStorage.getItem('woam_recommendation');
+        const savedRec = sessionStorage.getItem('hw_woam_recommendation');
         if (!savedRec) return;
 
         try {
@@ -1351,7 +1351,7 @@
                 });
             }
 
-            sessionStorage.removeItem('woam_recommendation');
+            sessionStorage.removeItem('hw_woam_recommendation');
 
             // Prompt the user to fill in "From" rather than guessing it,
             // and only load the analysis once both dates are present.

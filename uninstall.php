@@ -20,22 +20,15 @@ global $wpdb;
 
 // Drop all archive tables.
 $hw_woam_tables = array(
-	// Current tables.
-	$wpdb->prefix . 'woam_orders',
-	$wpdb->prefix . 'woam_orders_meta',
-	$wpdb->prefix . 'woam_order_items',
-	$wpdb->prefix . 'woam_order_items_meta',
-	$wpdb->prefix . 'woam_order_notes',
-	$wpdb->prefix . 'woam_order_notes_meta',
-	$wpdb->prefix . 'woam_logs',
-	$wpdb->prefix . 'woam_order_refunds',
-	$wpdb->prefix . 'woam_order_refunds_meta',
-
-	// Legacy beta tables (created by older versions, clean them up too).
-	$wpdb->prefix . 'woam_orders_archive',
-	$wpdb->prefix . 'woam_orders_meta_archive',
-	$wpdb->prefix . 'woam_order_items_archive',
-	$wpdb->prefix . 'woam_order_itemmeta_archive',
+	$wpdb->prefix . 'hw_woam_orders',
+	$wpdb->prefix . 'hw_woam_orders_meta',
+	$wpdb->prefix . 'hw_woam_order_items',
+	$wpdb->prefix . 'hw_woam_order_items_meta',
+	$wpdb->prefix . 'hw_woam_order_notes',
+	$wpdb->prefix . 'hw_woam_order_notes_meta',
+	$wpdb->prefix . 'hw_woam_logs',
+	$wpdb->prefix . 'hw_woam_order_refunds',
+	$wpdb->prefix . 'hw_woam_order_refunds_meta',
 );
 
 foreach ( $hw_woam_tables as $hw_woam_table ) {
@@ -45,7 +38,16 @@ foreach ( $hw_woam_tables as $hw_woam_table ) {
 
 // Delete plugin options.
 delete_option( 'hw_woam_db_version' );
+delete_option( 'hw_woam_growth_history' );
+delete_option( 'hw_woam_benchmarks' );
+delete_option( 'hw_woam_onboarding_completed' );
+delete_option( 'hw_woam_onboarding_skipped' );
+delete_option( 'hw_woam_last_health_cron' );
 
 // Delete transients.
-delete_option( 'hw_woam_job_running' );
-delete_option( 'hw_woam_order_date_range' );
+delete_transient( 'hw_woam_job_running' );
+delete_transient( 'hw_woam_order_date_range' );
+delete_transient( 'hw_woam_health_score_cache' );
+
+// Clear any scheduled cron event.
+wp_clear_scheduled_hook( 'hw_woam_refresh_health_score' );

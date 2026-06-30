@@ -116,8 +116,8 @@ class AnalyticsHandler {
 	public function get_lifetime_stats(): array {
 		global $wpdb;
 
-		$logs_exists   = $this->table_exists( $wpdb->prefix . 'woam_logs' );
-		$orders_exists = $this->table_exists( $wpdb->prefix . 'woam_orders' );
+		$logs_exists   = $this->table_exists( $wpdb->prefix . 'hw_woam_logs' );
+		$orders_exists = $this->table_exists( $wpdb->prefix . 'hw_woam_orders' );
 
 		$total_archived        = 0;
 		$total_saved_bytes     = 0;
@@ -129,13 +129,13 @@ class AnalyticsHandler {
 
 		if ( $orders_exists ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-			$total_archived = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}woam_orders`" );
+			$total_archived = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}hw_woam_orders`" );
 		}
 
 		if ( $logs_exists ) {
 			$archive_success_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'archive',
 					'success'
 				)
@@ -146,7 +146,7 @@ class AnalyticsHandler {
 
 			$restore_success_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore',
 					'success'
 				)
@@ -154,7 +154,7 @@ class AnalyticsHandler {
 
 			$restore_failure_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s AND status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore',
 					'error'
 				)
@@ -162,21 +162,21 @@ class AnalyticsHandler {
 
 			$archive_run_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'archive'
 				)
 			);
 
 			$restore_run_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'restore'
 				)
 			);
 
 			$delete_run_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(DISTINCT DATE(created_at)) FROM `{$wpdb->prefix}hw_woam_logs` WHERE action = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					'delete'
 				)
 			);
@@ -318,11 +318,11 @@ class AnalyticsHandler {
 
 		// Check 1: Archive tables exist.
 		$expected_tables = array(
-			$wpdb->prefix . 'woam_orders',
-			$wpdb->prefix . 'woam_orders_meta',
-			$wpdb->prefix . 'woam_order_items',
-			$wpdb->prefix . 'woam_order_items_meta',
-			$wpdb->prefix . 'woam_logs',
+			$wpdb->prefix . 'hw_woam_orders',
+			$wpdb->prefix . 'hw_woam_orders_meta',
+			$wpdb->prefix . 'hw_woam_order_items',
+			$wpdb->prefix . 'hw_woam_order_items_meta',
+			$wpdb->prefix . 'hw_woam_logs',
 		);
 
 		$missing_tables = array();
@@ -524,9 +524,9 @@ class AnalyticsHandler {
 		$live_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->posts}` WHERE post_type = 'shop_order'" );
 
 		$archived_orders_count = 0;
-		if ( $this->table_exists( $wpdb->prefix . 'woam_orders' ) ) {
+		if ( $this->table_exists( $wpdb->prefix . 'hw_woam_orders' ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-			$archived_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}woam_orders`" );
+			$archived_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}hw_woam_orders`" );
 		}
 
 		$total_orders       = $live_orders_count + $archived_orders_count;
@@ -549,9 +549,9 @@ class AnalyticsHandler {
 		$live_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->posts}` WHERE post_type = 'shop_order'" );
 
 		$archived_orders_count = 0;
-		if ( $this->table_exists( $wpdb->prefix . 'woam_orders' ) ) {
+		if ( $this->table_exists( $wpdb->prefix . 'hw_woam_orders' ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-			$archived_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}woam_orders`" );
+			$archived_orders_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}hw_woam_orders`" );
 		}
 
 		$total_orders = $live_orders_count + $archived_orders_count;
@@ -575,12 +575,12 @@ class AnalyticsHandler {
 		$orphaned_items     = 0;
 		$orphaned_item_meta = 0;
 
-		if ( $this->table_exists( "{$p}woam_orders" ) ) {
+		if ( $this->table_exists( "{$p}hw_woam_orders" ) ) {
 			// Check orphaned meta.
 			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$orphaned_meta = (int) $wpdb->get_var(
-				"SELECT COUNT(*) FROM `{$p}woam_orders_meta` om
-				LEFT JOIN `{$p}woam_orders` o ON om.post_id = o.ID
+				"SELECT COUNT(*) FROM `{$p}hw_woam_orders_meta` om
+				LEFT JOIN `{$p}hw_woam_orders` o ON om.post_id = o.ID
 				WHERE o.ID IS NULL"
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -588,18 +588,18 @@ class AnalyticsHandler {
 			// Check orphaned order items.
 			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$orphaned_items = (int) $wpdb->get_var(
-				"SELECT COUNT(*) FROM `{$p}woam_order_items` oi
-				LEFT JOIN `{$p}woam_orders` o ON oi.order_id = o.ID
+				"SELECT COUNT(*) FROM `{$p}hw_woam_order_items` oi
+				LEFT JOIN `{$p}hw_woam_orders` o ON oi.order_id = o.ID
 				WHERE o.ID IS NULL"
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 			// Check orphaned item meta if items table exists.
-			if ( 0 === $orphaned_items && $this->table_exists( "{$p}woam_order_items" ) ) {
+			if ( 0 === $orphaned_items && $this->table_exists( "{$p}hw_woam_order_items" ) ) {
 				// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$orphaned_item_meta = (int) $wpdb->get_var(
-					"SELECT COUNT(*) FROM `{$p}woam_order_items_meta` oim
-					LEFT JOIN `{$p}woam_order_items` oi ON oim.order_item_id = oi.order_item_id
+					"SELECT COUNT(*) FROM `{$p}hw_woam_order_items_meta` oim
+					LEFT JOIN `{$p}hw_woam_order_items` oi ON oim.order_item_id = oi.order_item_id
 					WHERE oi.order_item_id IS NULL"
 				);
 				// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -701,7 +701,7 @@ class AnalyticsHandler {
 
 		$p = $wpdb->prefix;
 
-		if ( ! $this->table_exists( "{$p}woam_orders" ) || ! $this->table_exists( "{$p}woam_orders_meta" ) ) {
+		if ( ! $this->table_exists( "{$p}hw_woam_orders" ) || ! $this->table_exists( "{$p}hw_woam_orders_meta" ) ) {
 			return 0.0;
 		}
 
@@ -709,8 +709,8 @@ class AnalyticsHandler {
 		$revenue = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT SUM(CAST(meta_value AS DECIMAL(10,2)))
-				FROM `{$p}woam_orders_meta` om
-				INNER JOIN `{$p}woam_orders` o ON om.post_id = o.ID
+				FROM `{$p}hw_woam_orders_meta` om
+				INNER JOIN `{$p}hw_woam_orders` o ON om.post_id = o.ID
 				WHERE om.meta_key = %s",
 				'_order_total'
 			)

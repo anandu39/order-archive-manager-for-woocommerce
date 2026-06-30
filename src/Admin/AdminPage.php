@@ -72,14 +72,14 @@ class AdminPage {
 		}
 
 		wp_enqueue_style(
-			'woam-admin',
+			'hw-woam-admin',
 			HW_WOAM_URL . 'assets/css/woam-admin.css',
 			array(),
 			HW_WOAM_VERSION
 		);
 
 		wp_enqueue_script(
-			'woam-admin',
+			'hw-woam-admin',
 			HW_WOAM_URL . 'assets/js/woam-admin.js',
 			array( 'jquery-ui-datepicker' ),
 			HW_WOAM_VERSION,
@@ -88,15 +88,15 @@ class AdminPage {
 
 		// WordPress ships jQuery UI Datepicker CSS via this handle.
 		wp_enqueue_style(
-			'woam-jquery-ui',
+			'hw-woam-jquery-ui',
 			HW_WOAM_URL . 'assets/css/jquery-ui.min.css',
 			array(),
 			'1.13.2'
 		);
 
 		wp_localize_script(
-			'woam-admin',
-			'woamData',
+			'hw-woam-admin',
+			'hwWoamData',
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'hw_woam_ajax' ),
