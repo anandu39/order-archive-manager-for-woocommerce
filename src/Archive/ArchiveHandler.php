@@ -79,8 +79,8 @@ class ArchiveHandler {
 		}
 
 		$in_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
-		$posts_table      = $this->wpdb->posts;
-		$postmeta_table   = $this->wpdb->postmeta;
+		$posts_table     = $this->wpdb->posts;
+		$postmeta_table  = $this->wpdb->postmeta;
 
 		$subscription_filter = ' AND NOT EXISTS (
 				SELECT 1 FROM `' . $posts_table . '` s
@@ -129,9 +129,9 @@ class ArchiveHandler {
 		}
 
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-		$posts_table      = $this->wpdb->posts;
-		$postmeta_table   = $this->wpdb->postmeta;
-		$exclude_params   = ! empty( $exclude_ids ) ? array_map( 'intval', $exclude_ids ) : array();
+		$posts_table     = $this->wpdb->posts;
+		$postmeta_table  = $this->wpdb->postmeta;
+		$exclude_params  = ! empty( $exclude_ids ) ? array_map( 'intval', $exclude_ids ) : array();
 
 		// Exclude orders linked to a subscription that is still active /
 		// on-hold / pending-cancel, and exclude renewal/resubscribe orders
@@ -343,30 +343,30 @@ class ArchiveHandler {
 	 */
 	private function verify_archive_copy( int $order_id ): void {
 		$db = $this->wpdb;
-		
-		// Get table names safely
-		$src_postmeta_tbl = $db->postmeta;
-		$arc_orders_meta_tbl = $this->tables->orders_meta;
-		$arc_order_items_tbl = $this->tables->order_items;
-		$arc_item_meta_tbl = $this->tables->order_items_meta;
-		$order_items_table = $db->prefix . 'woocommerce_order_items';
+
+		// Get table names safely.
+		$src_postmeta_tbl       = $db->postmeta;
+		$arc_orders_meta_tbl    = $this->tables->orders_meta;
+		$arc_order_items_tbl    = $this->tables->order_items;
+		$arc_item_meta_tbl      = $this->tables->order_items_meta;
+		$order_items_table      = $db->prefix . 'woocommerce_order_items';
 		$order_items_meta_table = $db->prefix . 'woocommerce_order_itemmeta';
-		
-		// Use properly quoted table names with backticks
+
+		// Use properly quoted table names with backticks.
 		$source_meta = (int) $db->get_var(
 			$db->prepare(
 				"SELECT COUNT(*) FROM `{$src_postmeta_tbl}` WHERE post_id = %d",
 				$order_id
 			)
 		);
-		
+
 		$source_items = (int) $db->get_var(
 			$db->prepare(
 				"SELECT COUNT(*) FROM `{$order_items_table}` WHERE order_id = %d",
 				$order_id
 			)
 		);
-		
+
 		$source_item_meta = (int) $db->get_var(
 			$db->prepare(
 				"SELECT COUNT(*) FROM `{$order_items_meta_table}` oim 
@@ -375,22 +375,22 @@ class ArchiveHandler {
 				$order_id
 			)
 		);
-		
-		// Archive counts - use properly quoted table names
+
+		// Archive counts - use properly quoted table names.
 		$archive_meta = (int) $db->get_var(
 			$db->prepare(
 				"SELECT COUNT(*) FROM `{$arc_orders_meta_tbl}` WHERE post_id = %d",
 				$order_id
 			)
 		);
-		
+
 		$archive_items = (int) $db->get_var(
 			$db->prepare(
 				"SELECT COUNT(*) FROM `{$arc_order_items_tbl}` WHERE order_id = %d",
 				$order_id
 			)
 		);
-		
+
 		$archive_item_meta = (int) $db->get_var(
 			$db->prepare(
 				"SELECT COUNT(*) FROM `{$arc_item_meta_tbl}` oim 
@@ -399,8 +399,8 @@ class ArchiveHandler {
 				$order_id
 			)
 		);
-		
-		// Verify counts match
+
+		// Verify counts match.
 		if ( $archive_meta !== $source_meta ) {
 			throw new \Exception(
 				esc_html(
@@ -408,7 +408,7 @@ class ArchiveHandler {
 				)
 			);
 		}
-		
+
 		if ( $archive_items !== $source_items ) {
 			throw new \Exception(
 				esc_html(
@@ -416,7 +416,7 @@ class ArchiveHandler {
 				)
 			);
 		}
-		
+
 		if ( $archive_item_meta !== $source_item_meta ) {
 			throw new \Exception(
 				esc_html(
@@ -1016,26 +1016,26 @@ class ArchiveHandler {
 	 */
 	private function delete_order_analytics( int $order_id ): void {
 		$db = $this->wpdb;
-		
+
 		$analytics_tables = array(
 			'wc_order_product_lookup' => 'order_id',
-			'wc_order_coupon_lookup' => 'order_id',
-			'wc_order_tax_lookup' => 'order_id',
+			'wc_order_coupon_lookup'  => 'order_id',
+			'wc_order_tax_lookup'     => 'order_id',
 		);
-		
+
 		foreach ( $analytics_tables as $table_suffix => $column ) {
 			$table = $db->prefix . $table_suffix;
-			
-			// Check if table exists
+
+			// Check if table exists.
 			$table_exists = $db->get_var(
-				$db->prepare( "SHOW TABLES LIKE %s", $table )
+				$db->prepare( 'SHOW TABLES LIKE %s', $table )
 			);
-			
+
 			if ( $table_exists !== $table ) {
 				continue;
 			}
-			
-			// Properly quoted delete query
+
+			// Properly quoted delete query.
 			$db->query(
 				$db->prepare(
 					"DELETE FROM `{$table}` WHERE `{$column}` = %d",
@@ -1043,7 +1043,7 @@ class ArchiveHandler {
 				)
 			);
 		}
-		
+
 		$this->maybe_delete_customer_lookup( $order_id );
 	}
 

@@ -891,71 +891,71 @@ class AjaxHandler {
 		$eligible          = 0;
 		$eligible_statuses = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' );
 
-		// Get all order IDs in the date range to check subscription status
+		// Get all order IDs in the date range to check subscription status.
 		$order_ids = array();
 		foreach ( $results as $row ) {
 			$breakdown[ $row->post_status ] = (int) $row->count;
-			$total += (int) $row->count;
-			
+			$total                         += (int) $row->count;
+
 			if ( in_array( $row->post_status, $eligible_statuses, true ) ) {
-				// Get actual order IDs for this status to check subscription links
-				$status_placeholders = '%s';
-				$sql = $wpdb->prepare(
-					"SELECT ID FROM `{$wpdb->posts}` 
-					WHERE post_type = 'shop_order' 
+				// Get actual order IDs for this status to check subscription links.
+				$id_lookup_sql = "SELECT ID FROM `{$wpdb->posts}`
+					WHERE post_type = 'shop_order'
 					AND post_status = %s
-					AND post_date >= %s 
-					AND post_date <= %s",
-					$row->post_status,
-					$from_datetime,
-					$to_datetime
+					AND post_date >= %s
+					AND post_date <= %s";
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$ids       = $wpdb->get_col(
+					$wpdb->prepare(
+						$id_lookup_sql, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+						$row->post_status,
+						$from_datetime,
+						$to_datetime
+					)
 				);
-				$ids = $wpdb->get_col( $sql );
 				$order_ids = array_merge( $order_ids, $ids );
 			}
 		}
 
-		// Now filter out subscription-protected orders
+		// Now filter out subscription-protected orders.
 		$eligible = 0;
 		if ( class_exists( 'WC_Subscriptions' ) && ! empty( $order_ids ) ) {
-			// Build query to check for subscription links
+			// Build query to check for subscription links.
 			$id_placeholders = implode( ', ', array_fill( 0, count( $order_ids ), '%d' ) );
-			
-			// Check if any of these orders are linked to protected subscriptions
+
+			$protected_sql = "SELECT DISTINCT post_parent
+				FROM `{$wpdb->posts}`
+				WHERE post_type = 'shop_subscription'
+				AND post_parent IN ({$id_placeholders})
+				AND post_status IN ('wc-active', 'wc-pending-cancel', 'wc-on-hold')";
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$protected_ids = $wpdb->get_col(
-				$wpdb->prepare(
-					"SELECT DISTINCT post_parent 
-					FROM `{$wpdb->posts}` 
-					WHERE post_type = 'shop_subscription' 
-					AND post_parent IN ({$id_placeholders})
-					AND post_status IN ('wc-active', 'wc-pending-cancel', 'wc-on-hold')",
-					$order_ids
-				)
+				$wpdb->prepare( $protected_sql, $order_ids ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			);
-			
-			// Also check for renewal orders
-			if ( ! empty( $order_ids ) ) {
-				$renewal_ids = $wpdb->get_col(
-					$wpdb->prepare(
-						"SELECT DISTINCT post_id 
-						FROM `{$wpdb->postmeta}` 
-						WHERE post_id IN ({$id_placeholders})
-						AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')",
-						$order_ids
-					)
-				);
-				$protected_ids = array_merge( $protected_ids, $renewal_ids );
-			}
-			
-			$protected_ids = array_unique( $protected_ids );
-			$eligible = count( $order_ids ) - count( $protected_ids );
-			
-			// Update breakdown to show actual eligible count
-			$breakdown['eligible'] = $eligible;
+
+			// Also check for renewal orders — $order_ids is already known
+			// non-empty from the outer guard, so no need to re-check it.
+			$renewal_sql = "SELECT DISTINCT post_id
+				FROM `{$wpdb->postmeta}`
+				WHERE post_id IN ({$id_placeholders})
+				AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')";
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$renewal_ids = $wpdb->get_col(
+				$wpdb->prepare( $renewal_sql, $order_ids ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			);
+
+			$protected_ids = array_unique( array_merge( $protected_ids, $renewal_ids ) );
+			$eligible      = count( $order_ids ) - count( $protected_ids );
+
+			// Update breakdown to show actual eligible count.
+			$breakdown['eligible']  = $eligible;
 			$breakdown['protected'] = count( $protected_ids );
-			
+
 		} else {
-			// Subscriptions not active, count all eligible statuses
+			// Subscriptions not active, count all eligible statuses.
 			foreach ( $results as $row ) {
 				if ( in_array( $row->post_status, $eligible_statuses, true ) ) {
 					$eligible += (int) $row->count;
@@ -964,8 +964,8 @@ class AjaxHandler {
 		}
 
 		// Calculate estimated savings.
-		$avg_order_size = $this->analytics_handler->get_average_order_size_bytes_authoritative();
-		$estimated_savings = $eligible * $avg_order_size;
+		$avg_order_size    = $this->analytics_handler->get_average_order_size_bytes_authoritative();
+		$estimated_savings = (int) round( $eligible * $avg_order_size );
 
 		wp_send_json_success(
 			array(
@@ -1046,16 +1046,16 @@ class AjaxHandler {
 		$eligible_statuses  = array( 'wc-cancelled', 'wc-expired', 'wc-failed' );
 
 		foreach ( $results as $row ) {
-			$status = str_replace( 'wc-', '', $row->post_status );
+			$status               = str_replace( 'wc-', '', $row->post_status );
 			$breakdown[ $status ] = (int) $row->count;
-			$total += (int) $row->count;
-			
-			// Check if this subscription status is protected or eligible
+			$total               += (int) $row->count;
+
+			// Check if this subscription status is protected or eligible.
 			if ( in_array( $row->post_status, $protected_statuses, true ) ) {
 				$protected += (int) $row->count;
 			} elseif ( in_array( $row->post_status, $eligible_statuses, true ) ) {
 				// Double-check: does this order actually have a protected parent?
-				// Some cancelled/expired subscriptions might still have active parent orders
+				// Some cancelled/expired subscriptions might still have active parent orders.
 				$eligibility_check = $wpdb->get_var(
 					$wpdb->prepare(
 						"SELECT COUNT(*) FROM `{$wpdb->posts}` 
@@ -1070,11 +1070,11 @@ class AjaxHandler {
 						$row->post_status
 					)
 				);
-				
-				if ( $eligibility_check == 0 ) {
+
+				if ( 0 === (int) $eligibility_check ) {
 					$eligible += (int) $row->count;
 				} else {
-					// This order is linked to a live parent, keep it protected
+					// This order is linked to a live parent, keep it protected.
 					$protected += (int) $row->count;
 				}
 			}
@@ -1475,7 +1475,7 @@ class AjaxHandler {
 
 			// Calculate estimated savings.
 			$avg_order_size    = $this->analytics_handler->get_average_order_size_bytes_authoritative();
-			$estimated_savings = $total_eligible * $avg_order_size;
+			$estimated_savings = (int) round( $total_eligible * $avg_order_size );
 
 			wp_send_json_success(
 				array(
@@ -1706,10 +1706,10 @@ class AjaxHandler {
 	 */
 	public function handle_invalidate_health_cache(): void {
 		$this->verify_request();
-		
+
 		$cache = new \HW\WOAM\Health\HealthScoreCache();
 		$cache->invalidate();
-		
-		wp_send_json_success(array('message' => 'Cache invalidated'));
+
+		wp_send_json_success( array( 'message' => 'Cache invalidated' ) );
 	}
 }
