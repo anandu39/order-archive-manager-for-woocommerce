@@ -79,13 +79,27 @@ class ArchiveHandler {
 		}
 
 		$in_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+		$posts_table      = $this->wpdb->posts;
+		$postmeta_table   = $this->wpdb->postmeta;
+
+		$subscription_filter = ' AND NOT EXISTS (
+				SELECT 1 FROM `' . $posts_table . '` s
+				WHERE s.post_parent = p.ID
+				AND s.post_type = \'shop_subscription\'
+				AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM `' . $postmeta_table . '` pm
+				WHERE pm.post_id = p.ID
+				AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
+			)';
 
 		if ( ! empty( $from_date ) ) {
-			$query  = "SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order' AND post_date >= %s AND post_date <= %s AND post_status IN ({$in_placeholders})";
-			$params = array_merge( array( $this->wpdb->posts, $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), $statuses );
+			$query  = 'SELECT COUNT(*) FROM `' . $posts_table . '` p WHERE p.post_type = \'shop_order\' AND p.post_date >= %s AND p.post_date <= %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter;
+			$params = array_merge( array( $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), $statuses );
 		} else {
-			$query  = "SELECT COUNT(*) FROM %i WHERE post_type = 'shop_order' AND post_date < %s AND post_status IN ({$in_placeholders})";
-			$params = array_merge( array( $this->wpdb->posts, $before_date ), $statuses );
+			$query  = 'SELECT COUNT(*) FROM `' . $posts_table . '` p WHERE p.post_type = \'shop_order\' AND p.post_date < %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter;
+			$params = array_merge( array( $before_date ), $statuses );
 		}
 
 		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -94,12 +108,18 @@ class ArchiveHandler {
 	}
 
 	/**
-	 * Retrieves a batch of order IDs matching the criteria, explicitly excluding specified IDs.
+	 * Retrieves a batch of order IDs matching the criteria, explicitly excluding
+	 * specified IDs and excluding any order that is linked to a subscription
+	 * (renewal/resubscribe orders, or orders that are the parent of an
+	 * active/on-hold/pending-cancel subscription). These are filtered out at
+	 * the SQL level so they are never returned as archive candidates in the
+	 * first place — they no longer need to be passed back via $exclude_ids
+	 * on every subsequent batch call.
 	 *
 	 * @param string $before_date  Cutoff date (YYYY-MM-DD HH:MM:SS).
 	 * @param array  $statuses     Array of target post statuses.
 	 * @param string $from_date    Optional start date for range queries (YYYY-MM-DD HH:MM:SS).
-	 * @param array  $exclude_ids  Array of order IDs to ignore (e.g., failed or skipped items).
+	 * @param array  $exclude_ids  Array of order IDs to ignore (e.g., genuine failures from a prior batch).
 	 * @return array
 	 */
 	public function get_batch_order_ids( string $before_date, array $statuses, string $from_date = '', array $exclude_ids = array() ): array {
@@ -109,8 +129,30 @@ class ArchiveHandler {
 		}
 
 		$in_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-		$posts_table     = $this->wpdb->posts;
-		$exclude_params  = ! empty( $exclude_ids ) ? array_map( 'intval', $exclude_ids ) : array();
+		$posts_table      = $this->wpdb->posts;
+		$postmeta_table   = $this->wpdb->postmeta;
+		$exclude_params   = ! empty( $exclude_ids ) ? array_map( 'intval', $exclude_ids ) : array();
+
+		// Exclude orders linked to a subscription that is still active /
+		// on-hold / pending-cancel, and exclude renewal/resubscribe orders
+		// outright. Mirrors the logic in get_subscription_status() so an
+		// order never gets fetched here only to be skipped later inside
+		// archive_order().
+		$subscription_filter = ' AND NOT EXISTS (
+				SELECT 1 FROM `' . $posts_table . '` s
+				WHERE s.post_parent = p.ID
+				AND s.post_type = \'shop_subscription\'
+				AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM `' . $postmeta_table . '` pm
+				WHERE pm.post_id = p.ID
+				AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
+			)';
+
+		$exclude_clause = ! empty( $exclude_ids )
+			? ' AND p.ID NOT IN (' . implode( ', ', array_fill( 0, count( $exclude_ids ), '%d' ) ) . ')'
+			: '';
 
 		if ( ! empty( $from_date ) ) {
 			$params = array_merge(
@@ -119,6 +161,14 @@ class ArchiveHandler {
 				$exclude_params,
 				array( $this->batch_size )
 			);
+
+			$sql = 'SELECT p.ID FROM `' . $posts_table . '` p
+				WHERE p.post_type = \'shop_order\'
+				AND p.post_date >= %s AND p.post_date <= %s
+				AND p.post_status IN (' . $in_placeholders . ')'
+				. $subscription_filter
+				. $exclude_clause
+				. ' ORDER BY p.ID ASC LIMIT %d';
 		} else {
 			$params = array_merge(
 				array( $before_date ),
@@ -126,24 +176,18 @@ class ArchiveHandler {
 				$exclude_params,
 				array( $this->batch_size )
 			);
+
+			$sql = 'SELECT p.ID FROM `' . $posts_table . '` p
+				WHERE p.post_type = \'shop_order\'
+				AND p.post_date < %s
+				AND p.post_status IN (' . $in_placeholders . ')'
+				. $subscription_filter
+				. $exclude_clause
+				. ' ORDER BY p.ID ASC LIMIT %d';
 		}
 
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		if ( ! empty( $from_date ) ) {
-			$col = $this->wpdb->get_col(
-				$this->wpdb->prepare(
-					'SELECT ID FROM `' . $posts_table . '` WHERE post_type = \'shop_order\' AND post_date >= %s AND post_date <= %s AND post_status IN (' . $in_placeholders . ')' . ( ! empty( $exclude_ids ) ? ' AND ID NOT IN (' . implode( ', ', array_fill( 0, count( $exclude_ids ), '%d' ) ) . ')' : '' ) . ' ORDER BY ID ASC LIMIT %d',
-					$params
-				)
-			);
-		} else {
-			$col = $this->wpdb->get_col(
-				$this->wpdb->prepare(
-					'SELECT ID FROM `' . $posts_table . '` WHERE post_type = \'shop_order\' AND post_date < %s AND post_status IN (' . $in_placeholders . ')' . ( ! empty( $exclude_ids ) ? ' AND ID NOT IN (' . implode( ', ', array_fill( 0, count( $exclude_ids ), '%d' ) ) . ')' : '' ) . ' ORDER BY ID ASC LIMIT %d',
-					$params
-				)
-			);
-		}
+		$col = $this->wpdb->get_col( $this->wpdb->prepare( $sql, $params ) );
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return array_map( 'intval', $col );
@@ -298,71 +342,65 @@ class ArchiveHandler {
 	 * @return void
 	 */
 	private function verify_archive_copy( int $order_id ): void {
-
-		$db                     = $this->wpdb;
-		$order_items_table      = $db->prefix . 'woocommerce_order_items';
-		$order_items_meta_table = $db->prefix . 'woocommerce_order_itemmeta';
-
-		// Extract deep properties into simple local variables to bypass strict token lookups.
-		$src_postmeta_tbl    = $db->postmeta;
+		$db = $this->wpdb;
+		
+		// Get table names safely
+		$src_postmeta_tbl = $db->postmeta;
 		$arc_orders_meta_tbl = $this->tables->orders_meta;
 		$arc_order_items_tbl = $this->tables->order_items;
-		$arc_item_meta_tbl   = $this->tables->order_items_meta;
-
-		// ---------------------------------------------------------------------
-		// Count Source Rows
-		// ---------------------------------------------------------------------
-
-		// 1. Source Meta
-		$q_src_meta    = 'SELECT COUNT(*) FROM %i WHERE post_id = %d';
-		$args_src_meta = array( $src_postmeta_tbl, $order_id );
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$sql_src_meta = $db->prepare( $q_src_meta, $args_src_meta );
-		$source_meta  = (int) $db->get_var( $sql_src_meta ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		// 2. Source Items
-		$q_src_items    = 'SELECT COUNT(*) FROM %i WHERE order_id = %d';
-		$args_src_items = array( $order_items_table, $order_id );
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$sql_src_items = $db->prepare( $q_src_items, $args_src_items );
-		$source_items  = (int) $db->get_var( $sql_src_items ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		// 3. Source Item Meta
-		$q_src_item_meta    = 'SELECT COUNT(*) FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args_src_item_meta = array( $order_items_meta_table, $order_items_table, $order_id );
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$sql_src_item_meta = $db->prepare( $q_src_item_meta, $args_src_item_meta );
-		$source_item_meta  = (int) $db->get_var( $sql_src_item_meta ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		// ---------------------------------------------------------------------
-		// Count Archive Rows
-		// ---------------------------------------------------------------------
-
-		// 4. Archive Meta
-		$q_arc_meta    = 'SELECT COUNT(*) FROM %i WHERE post_id = %d';
-		$args_arc_meta = array( $arc_orders_meta_tbl, $order_id );
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$sql_arc_meta = $db->prepare( $q_arc_meta, $args_arc_meta );
-		$archive_meta = (int) $db->get_var( $sql_arc_meta ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		// 5. Archive Items
-		$q_arc_items    = 'SELECT COUNT(*) FROM %i WHERE order_id = %d';
-		$args_arc_items = array( $arc_order_items_tbl, $order_id );
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$sql_arc_items = $db->prepare( $q_arc_items, $args_arc_items );
-		$archive_items = (int) $db->get_var( $sql_arc_items ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		// 6. Archive Item Meta
-		$q_arc_item_meta    = 'SELECT COUNT(*) FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args_arc_item_meta = array( $arc_item_meta_tbl, $arc_order_items_tbl, $order_id );
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$sql_arc_item_meta = $db->prepare( $q_arc_item_meta, $args_arc_item_meta );
-		$archive_item_meta = (int) $db->get_var( $sql_arc_item_meta ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
-		// ---------------------------------------------------------------------
-		// Verify Counts Match
-		// ---------------------------------------------------------------------
-
+		$arc_item_meta_tbl = $this->tables->order_items_meta;
+		$order_items_table = $db->prefix . 'woocommerce_order_items';
+		$order_items_meta_table = $db->prefix . 'woocommerce_order_itemmeta';
+		
+		// Use properly quoted table names with backticks
+		$source_meta = (int) $db->get_var(
+			$db->prepare(
+				"SELECT COUNT(*) FROM `{$src_postmeta_tbl}` WHERE post_id = %d",
+				$order_id
+			)
+		);
+		
+		$source_items = (int) $db->get_var(
+			$db->prepare(
+				"SELECT COUNT(*) FROM `{$order_items_table}` WHERE order_id = %d",
+				$order_id
+			)
+		);
+		
+		$source_item_meta = (int) $db->get_var(
+			$db->prepare(
+				"SELECT COUNT(*) FROM `{$order_items_meta_table}` oim 
+				INNER JOIN `{$order_items_table}` oi ON oim.order_item_id = oi.order_item_id 
+				WHERE oi.order_id = %d",
+				$order_id
+			)
+		);
+		
+		// Archive counts - use properly quoted table names
+		$archive_meta = (int) $db->get_var(
+			$db->prepare(
+				"SELECT COUNT(*) FROM `{$arc_orders_meta_tbl}` WHERE post_id = %d",
+				$order_id
+			)
+		);
+		
+		$archive_items = (int) $db->get_var(
+			$db->prepare(
+				"SELECT COUNT(*) FROM `{$arc_order_items_tbl}` WHERE order_id = %d",
+				$order_id
+			)
+		);
+		
+		$archive_item_meta = (int) $db->get_var(
+			$db->prepare(
+				"SELECT COUNT(*) FROM `{$arc_item_meta_tbl}` oim 
+				INNER JOIN `{$arc_order_items_tbl}` oi ON oim.order_item_id = oi.order_item_id 
+				WHERE oi.order_id = %d",
+				$order_id
+			)
+		);
+		
+		// Verify counts match
 		if ( $archive_meta !== $source_meta ) {
 			throw new \Exception(
 				esc_html(
@@ -370,7 +408,7 @@ class ArchiveHandler {
 				)
 			);
 		}
-
+		
 		if ( $archive_items !== $source_items ) {
 			throw new \Exception(
 				esc_html(
@@ -378,7 +416,7 @@ class ArchiveHandler {
 				)
 			);
 		}
-
+		
 		if ( $archive_item_meta !== $source_item_meta ) {
 			throw new \Exception(
 				esc_html(
@@ -977,41 +1015,35 @@ class ArchiveHandler {
 	 * @return void
 	 */
 	private function delete_order_analytics( int $order_id ): void {
-
-		$db               = $this->wpdb;
+		$db = $this->wpdb;
+		
 		$analytics_tables = array(
 			'wc_order_product_lookup' => 'order_id',
-			'wc_order_coupon_lookup'  => 'order_id',
-			'wc_order_tax_lookup'     => 'order_id',
+			'wc_order_coupon_lookup' => 'order_id',
+			'wc_order_tax_lookup' => 'order_id',
 		);
-
+		
 		foreach ( $analytics_tables as $table_suffix => $column ) {
 			$table = $db->prefix . $table_suffix;
-
-			// Isolate the table check execution string.
-			$check_query = 'SHOW TABLES LIKE %s';
-			$check_args  = array( $table );
-
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$prepared_check = $db->prepare( $check_query, $check_args );
-
-			if ( $db->get_var( $prepared_check ) !== $table ) {
+			
+			// Check if table exists
+			$table_exists = $db->get_var(
+				$db->prepare( "SHOW TABLES LIKE %s", $table )
+			);
+			
+			if ( $table_exists !== $table ) {
 				continue;
 			}
-
-			// Clean dynamic deletion mapping through double %i identifiers.
-			$delete_query = 'DELETE FROM %i WHERE %i = %d';
-			$delete_args  = array( $table, $column, $order_id );
-
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$prepared_delete = $db->prepare( $delete_query, $delete_args );
-
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$db->query( $prepared_delete );
+			
+			// Properly quoted delete query
+			$db->query(
+				$db->prepare(
+					"DELETE FROM `{$table}` WHERE `{$column}` = %d",
+					$order_id
+				)
+			);
 		}
-
-		// Customer lookup — only remove if this customer has no other live orders.
-		// Removing prematurely would break customer lifetime value reporting.
+		
 		$this->maybe_delete_customer_lookup( $order_id );
 	}
 

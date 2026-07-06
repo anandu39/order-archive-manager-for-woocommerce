@@ -141,7 +141,7 @@ class AnalyticsHandler {
 				)
 			);
 
-			$avg_order_size    = $this->get_average_order_size_bytes();
+			$avg_order_size    = $this->get_average_order_size_bytes_authoritative();
 			$total_saved_bytes = $archive_success_count * $avg_order_size;
 
 			$restore_success_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -513,6 +513,57 @@ class AnalyticsHandler {
 	}
 
 	/**
+	 * Estimates bytes freed per order using real on-disk average row sizes
+	 * from information_schema, across order-related tables. This is the
+	 * authoritative calculation and should be the only source of "average
+	 * order size" used anywhere savings/storage numbers are displayed —
+	 * replaces the old content-length-based estimate that undercounted
+	 * by ignoring index overhead and several related tables.
+	 *
+	 * @return float Average bytes per order.
+	 */
+	public function get_average_order_size_bytes_authoritative(): float {
+		global $wpdb;
+
+		$table_list = array(
+			'orders'      => $wpdb->posts,
+			'order_meta'  => $wpdb->postmeta,
+			'order_items' => $wpdb->prefix . 'woocommerce_order_items',
+			'item_meta'   => $wpdb->prefix . 'woocommerce_order_itemmeta',
+			'order_notes' => $wpdb->comments,
+		);
+
+		// Per-table fallback estimates, used only when information_schema
+		// can't give a real average (e.g. table currently has zero rows).
+		$avg_size_map = array(
+			'orders'      => 2000,
+			'order_meta'  => 100,
+			'order_items' => 200,
+			'item_meta'   => 100,
+			'order_notes' => 150,
+		);
+
+		$total = 0.0;
+
+		foreach ( $table_list as $key => $table ) {
+			$avg = (float) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->prepare(
+					'SELECT ROUND( ( DATA_LENGTH + INDEX_LENGTH ) / TABLE_ROWS, 2 )
+					FROM information_schema.TABLES
+					WHERE TABLE_SCHEMA = DATABASE()
+					AND TABLE_NAME = %s
+					AND TABLE_ROWS > 0',
+					$table
+				)
+			);
+
+			$total += $avg > 0 ? $avg : $avg_size_map[ $key ];
+		}
+
+		return $total > 0 ? $total : 51200;
+	}
+
+	/**
 	 * Calculates the archive usage score.
 	 *
 	 * @return int Score 0-100
@@ -641,54 +692,6 @@ class AnalyticsHandler {
 		$size_diff_mb = ( $newest_size - $oldest_size ) / ( 1024 * 1024 );
 
 		return max( 0, (int) ( $size_diff_mb / $months_diff ) );
-	}
-
-	/**
-	 * Gets average order size in bytes for estimation purposes.
-	 *
-	 * @return int Average order size in bytes
-	 */
-	private function get_average_order_size_bytes(): int {
-		global $wpdb;
-
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$sample_orders = $wpdb->get_col( "SELECT ID FROM `{$wpdb->posts}` WHERE post_type = 'shop_order' LIMIT 100" );
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		if ( empty( $sample_orders ) ) {
-			return 50 * 1024;
-		}
-
-		$order_count  = count( $sample_orders );
-		$placeholders = implode( ', ', array_fill( 0, $order_count, '%d' ) );
-
-		// Get meta data size.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$meta_bytes = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT SUM(LENGTH(meta_key) + LENGTH(meta_value))
-				FROM `{$wpdb->postmeta}`
-				WHERE post_id IN ({$placeholders})",
-				$sample_orders
-			)
-		);
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		// Get post data size.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$post_bytes = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT SUM(LENGTH(post_title) + LENGTH(post_content) + LENGTH(post_excerpt))
-				FROM `{$wpdb->posts}`
-				WHERE ID IN ({$placeholders})",
-				$sample_orders
-			)
-		);
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		$total_bytes = $meta_bytes + $post_bytes;
-
-		return $order_count > 0 ? (int) ( $total_bytes / $order_count ) : 50 * 1024;
 	}
 
 	/**

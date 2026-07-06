@@ -114,6 +114,7 @@ class AjaxHandler {
 		add_action( 'wp_ajax_hw_woam_get_recommendations', array( $this, 'handle_get_recommendations' ) );
 		add_action( 'wp_ajax_hw_woam_get_archive_readiness', array( $this, 'handle_get_archive_readiness' ) );
 		add_action( 'wp_ajax_hw_woam_get_growth_forecast', array( $this, 'handle_get_growth_forecast' ) );
+		add_action( 'wp_ajax_hw_woam_invalidate_health_cache', array( $this, 'handle_invalidate_health_cache' ) );
 
 		// Benchmark and Subscription hooks.
 		add_action( 'wp_ajax_hw_woam_get_subscription_analysis', array( $this, 'handle_get_subscription_analysis' ) );
@@ -316,13 +317,8 @@ class AjaxHandler {
 
 			// Add has_more so the JS loop knows exactly when to stop.
 			// Dry run rolls back everything — nothing moves — so one pass is always enough.
-			if ( $dry_run ) {
-				$result['has_more'] = false;
-			} else {
-				// Real run: re-query remaining eligible count after the batch.
-				$remaining          = $this->archive_handler->get_total_orders_to_archive( $before_date, $statuses, $from_date );
-				$result['has_more'] = $remaining > 0;
-			}
+			$remaining          = $this->archive_handler->get_total_orders_to_archive( $before_date, $statuses, $from_date );
+			$result['has_more'] = $remaining > 0;
 		} finally {
 			$this->release_lock();
 		}
@@ -895,16 +891,80 @@ class AjaxHandler {
 		$eligible          = 0;
 		$eligible_statuses = array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' );
 
+		// Get all order IDs in the date range to check subscription status
+		$order_ids = array();
 		foreach ( $results as $row ) {
 			$breakdown[ $row->post_status ] = (int) $row->count;
-			$total                         += (int) $row->count;
+			$total += (int) $row->count;
+			
 			if ( in_array( $row->post_status, $eligible_statuses, true ) ) {
-				$eligible += (int) $row->count;
+				// Get actual order IDs for this status to check subscription links
+				$status_placeholders = '%s';
+				$sql = $wpdb->prepare(
+					"SELECT ID FROM `{$wpdb->posts}` 
+					WHERE post_type = 'shop_order' 
+					AND post_status = %s
+					AND post_date >= %s 
+					AND post_date <= %s",
+					$row->post_status,
+					$from_datetime,
+					$to_datetime
+				);
+				$ids = $wpdb->get_col( $sql );
+				$order_ids = array_merge( $order_ids, $ids );
+			}
+		}
+
+		// Now filter out subscription-protected orders
+		$eligible = 0;
+		if ( class_exists( 'WC_Subscriptions' ) && ! empty( $order_ids ) ) {
+			// Build query to check for subscription links
+			$id_placeholders = implode( ', ', array_fill( 0, count( $order_ids ), '%d' ) );
+			
+			// Check if any of these orders are linked to protected subscriptions
+			$protected_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT DISTINCT post_parent 
+					FROM `{$wpdb->posts}` 
+					WHERE post_type = 'shop_subscription' 
+					AND post_parent IN ({$id_placeholders})
+					AND post_status IN ('wc-active', 'wc-pending-cancel', 'wc-on-hold')",
+					$order_ids
+				)
+			);
+			
+			// Also check for renewal orders
+			if ( ! empty( $order_ids ) ) {
+				$renewal_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT post_id 
+						FROM `{$wpdb->postmeta}` 
+						WHERE post_id IN ({$id_placeholders})
+						AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe')",
+						$order_ids
+					)
+				);
+				$protected_ids = array_merge( $protected_ids, $renewal_ids );
+			}
+			
+			$protected_ids = array_unique( $protected_ids );
+			$eligible = count( $order_ids ) - count( $protected_ids );
+			
+			// Update breakdown to show actual eligible count
+			$breakdown['eligible'] = $eligible;
+			$breakdown['protected'] = count( $protected_ids );
+			
+		} else {
+			// Subscriptions not active, count all eligible statuses
+			foreach ( $results as $row ) {
+				if ( in_array( $row->post_status, $eligible_statuses, true ) ) {
+					$eligible += (int) $row->count;
+				}
 			}
 		}
 
 		// Calculate estimated savings.
-		$avg_order_size    = $this->get_average_order_size_bytes();
+		$avg_order_size = $this->analytics_handler->get_average_order_size_bytes_authoritative();
 		$estimated_savings = $eligible * $avg_order_size;
 
 		wp_send_json_success(
@@ -986,14 +1046,37 @@ class AjaxHandler {
 		$eligible_statuses  = array( 'wc-cancelled', 'wc-expired', 'wc-failed' );
 
 		foreach ( $results as $row ) {
-			$status               = str_replace( 'wc-', '', $row->post_status );
+			$status = str_replace( 'wc-', '', $row->post_status );
 			$breakdown[ $status ] = (int) $row->count;
-			$total               += (int) $row->count;
-
+			$total += (int) $row->count;
+			
+			// Check if this subscription status is protected or eligible
 			if ( in_array( $row->post_status, $protected_statuses, true ) ) {
 				$protected += (int) $row->count;
 			} elseif ( in_array( $row->post_status, $eligible_statuses, true ) ) {
-				$eligible += (int) $row->count;
+				// Double-check: does this order actually have a protected parent?
+				// Some cancelled/expired subscriptions might still have active parent orders
+				$eligibility_check = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM `{$wpdb->posts}` 
+						WHERE post_parent IN (
+							SELECT ID FROM `{$wpdb->posts}` 
+							WHERE post_type = 'shop_order'
+							AND post_status IN ('wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending')
+						)
+						AND post_type = 'shop_subscription'
+						AND post_status = %s
+						LIMIT 1",
+						$row->post_status
+					)
+				);
+				
+				if ( $eligibility_check == 0 ) {
+					$eligible += (int) $row->count;
+				} else {
+					// This order is linked to a live parent, keep it protected
+					$protected += (int) $row->count;
+				}
 			}
 		}
 
@@ -1391,7 +1474,7 @@ class AjaxHandler {
 			$sub_data    = $sub_manager->get_subscription_breakdown();
 
 			// Calculate estimated savings.
-			$avg_order_size    = $this->get_average_order_size_bytes();
+			$avg_order_size    = $this->analytics_handler->get_average_order_size_bytes_authoritative();
 			$estimated_savings = $total_eligible * $avg_order_size;
 
 			wp_send_json_success(
@@ -1617,36 +1700,16 @@ class AjaxHandler {
 	}
 
 	/**
-	 * Returns an estimated average order size in bytes.
-	 * Queries information_schema for the combined average row size
-	 * across posts, postmeta, order_items, and order_itemmeta.
+	 * Invalidate health score cache.
 	 *
-	 * @return int Estimated bytes per order.
+	 * @return void
 	 */
-	private function get_average_order_size_bytes(): int {
-		global $wpdb;
-
-		$tables = array(
-			$wpdb->posts,
-			$wpdb->postmeta,
-			$wpdb->prefix . 'woocommerce_order_items',
-			$wpdb->prefix . 'woocommerce_order_itemmeta',
-		);
-
-		$placeholders = implode( ', ', array_fill( 0, count( $tables ), '%s' ) );
-
-		$sql = "SELECT ROUND( SUM( DATA_LENGTH + INDEX_LENGTH ) / SUM( TABLE_ROWS ), 2 )
-			FROM information_schema.TABLES
-			WHERE TABLE_SCHEMA = DATABASE()
-			AND TABLE_NAME IN ({$placeholders})
-			AND TABLE_ROWS > 0";
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders are dynamically built and safe.
-		$avg = (float) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->prepare( $sql, $tables ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		);
-
-		// Fallback to 50 KB if information_schema returns nothing.
-		return $avg > 0 ? (int) $avg : 51200;
+	public function handle_invalidate_health_cache(): void {
+		$this->verify_request();
+		
+		$cache = new \HW\WOAM\Health\HealthScoreCache();
+		$cache->invalidate();
+		
+		wp_send_json_success(array('message' => 'Cache invalidated'));
 	}
 }

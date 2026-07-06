@@ -18,6 +18,8 @@
         totalOrders: 0,
         processedOrders: 0,
         excludeIds: [],
+        wizardState: 'idle', // 'idle' | 'selecting' | 'reviewing' | 'running' | 'completed'
+        lastTab: 'overview',
     };
 
     /**
@@ -1368,9 +1370,6 @@
         }
     }
 
-    /**
-     * Enhanced progress display with ETA and batch info
-     */
     async function runBatchLoopEnhanced(opts) {
         const { action, payload, total, progressEl, fillEl, textEl, summaryEl, startBtn, confirmEl } = opts;
 
@@ -1471,8 +1470,6 @@
                 `;
 
                 // ─── PRIMARY TERMINATION: server signals nothing remains ───
-                // has_more=false on dry_run (one pass always enough, nothing moved).
-                // has_more=false on real run when remaining eligible count hits zero.
                 if (data.has_more === false) {
                     break;
                 }
@@ -1483,9 +1480,6 @@
                 }
 
                 // ─── ANTI-DEADLOCK TRAP ───
-                // Skip this check on dry runs: succeeded is always 0 because every
-                // transaction is intentionally rolled back. The has_more flag is the
-                // correct termination signal for dry runs.
                 if (!payload.dry_run && data.processed > 0 && data.succeeded === 0 && (!data.failed_ids || data.failed_ids.length === 0)) {
                     throw new Error('Batch processing paused: Items are failing or being skipped without clearing from memory.');
                 }
@@ -1517,38 +1511,115 @@
             // If the wizard was reset while this batch was running, discard the result.
             if (summaryEl.dataset.woamRunId !== runId.toString()) return;
 
-            summaryEl.innerHTML = `
-                <div class="woam-summary woam-summary--${failed > 0 ? 'warn' : 'ok'}">
-                    <div>
-                        <p><strong>${formatNumber(succeeded)}</strong> succeeded &nbsp;
-                        <strong>${formatNumber(skipped)}</strong> skipped (subscription-protected) &nbsp;
-                        <strong>${formatNumber(failed)}</strong> failed${dryNote}</p>
-                        <p style="font-size: 12px; color: #646970; margin-top: 4px;">
-                            Completed in ${finalTime} · ${formatNumber(processed)} orders processed · ${batchCount} batches
-                        </p>
-                        ${skipReasonsHtml}
-                    </div>
-                </div>`;
+            // ── INVALIDATE HEALTH SCORE CACHE AFTER SUCCESSFUL OPERATION ──
+            if (!payload.dry_run && succeeded > 0) {
+                try {
+                    await woamPost('hw_woam_invalidate_health_cache');
+                } catch (e) {
+                    console.error('Failed to invalidate cache:', e);
+                }
+            }
 
-            state.dirty = true;
+                     // ── UPDATE WIZARD STATE ──────────────────────────────────────────
+            if (!payload.dry_run && succeeded > 0) {
+                if (failed === 0) {
+                    state.wizardState = 'completed';
+                } else if (failed > 0) {
+                    state.wizardState = 'reviewing'; // Partial success, needs attention
+                }
+            } else if (payload.dry_run) {
+                state.wizardState = 'idle';
+            }
 
             // ── POST-RUN UI STATE ──────────────────────────────────────────
             if (payload.dry_run) {
                 // Dry run finished: uncheck the checkbox so clicking Start Archive
-                // again will run the real archive. Leave button label as-is.
+                // again will run the real archive.
                 const dryRunCb = document.getElementById('woam-archive-dry-run');
                 if (dryRunCb) {
                     dryRunCb.checked = false;
-                    // Trigger a small visual cue so the user notices the change.
                     dryRunCb.closest('label, .woam-dry-run-row, p')?.classList.add('woam-dry-run-unchecked');
                 }
-            } else if (succeeded > 0) {
-                // Real archive finished successfully: swap button to green shortcut.
+                
+                // Show completion notification for dry run
+                if (summaryEl) {
+                    summaryEl.innerHTML = `
+                        <div class="woam-summary woam-summary--ok">
+                            <p><span class="dashicons dashicons-yes-alt" style="color: #2ea64a;"></span> 
+                            <strong>Dry run completed successfully!</strong></p>
+                            <p style="font-size: 12px; color: #646970; margin-top: 4px;">
+                                ${formatNumber(succeeded)} orders would be archived. 
+                                ${skipped > 0 ? `${formatNumber(skipped)} would be skipped.` : ''}
+                                ${failed > 0 ? `${formatNumber(failed)} would fail.` : ''}
+                            </p>
+                            <p style="font-size: 12px; color: #7f54b3; margin-top: 8px;">
+                                <strong>Ready to run the real archive?</strong> 
+                                Uncheck "Dry run" and click "Start Archive" again.
+                            </p>
+                        </div>
+                    `;
+                }
+                
+            } else if (succeeded > 0 && failed === 0) {
+                // All orders archived successfully
+                showNotification(`Successfully archived ${formatNumber(succeeded)} orders!`, 'success');
+                
+                // Reset button
                 startBtn.disabled = false;
                 startBtn.style.cssText = 'background:#2ea64a;color:#fff;border-color:#2ea64a;';
                 startBtn.innerHTML = '<span class="dashicons dashicons-archive" style="margin-right:6px;vertical-align:middle;font-size:14px;width:14px;height:14px;"></span> View Archived Orders';
                 startBtn.dataset.archiveDone = '1';
+                state.wizardState = 'completed';
+                
+                // Show completion message with actions
+                if (summaryEl) {
+                    summaryEl.innerHTML = `
+                        <div class="woam-summary woam-summary--ok">
+                            <p><span class="dashicons dashicons-yes-alt" style="color: #2ea64a;"></span> 
+                            <strong>Archive completed successfully!</strong></p>
+                            <p style="font-size: 12px; color: #646970; margin-top: 4px;">
+                                ${formatNumber(succeeded)} orders archived successfully.
+                                ${skipped > 0 ? `${formatNumber(skipped)} orders were skipped.` : ''}
+                            </p>
+                            <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button type="button" class="woam-button woam-button--primary" onclick="document.querySelector('.woam-tab[data-tab=\\'archived\\']')?.click();">
+                                    <span class="dashicons dashicons-archive"></span>
+                                    View Archived Orders
+                                </button>
+                                <button type="button" class="woam-button woam-button--secondary" onclick="resetArchiveWizard(true);">
+                                    <span class="dashicons dashicons-plus"></span>
+                                    Start New Archive
+                                </button>
+                            </div>
+                            <p style="font-size: 11px; color: #646970; margin-top: 8px;">
+                                Orders that were archived are now in the Archived Orders tab. 
+                                Click "Start New Archive" to begin a new archive operation.
+                            </p>
+                        </div>
+                    `;
+                }
+                
+                // Auto-redirect to Archived tab after 3 seconds
+                setTimeout(() => {
+                    document.querySelector('.woam-tab[data-tab="archived"]')?.click();
+                }, 3000);
+                
+            } else if (succeeded > 0 && failed > 0) {
+                // Partial success - show warning with details
+                showNotification(`${formatNumber(succeeded)} archived, ${formatNumber(failed)} failed. Check logs for details.`, 'warning');
+                
+                startBtn.disabled = false;
+                startBtn.textContent = 'Retry Failed';
+                startBtn.style.cssText = 'background:#dba617;color:#fff;border-color:#dba617;';
+                
+            } else if (succeeded === 0 && processed > 0) {
+                // All failed - show error
+                showNotification(`All ${formatNumber(processed)} orders failed to archive. Check logs.`, 'error');
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Archive';
             }
+
+            state.dirty = true;
 
         } catch (err) {
             if (summaryEl.dataset.woamRunId === runId.toString()) {
@@ -1563,44 +1634,116 @@
 
     /**
      * Resets the Archive tab wizard back to Step 1 with a clean slate.
-     * Called whenever the Archive tab is opened, including after a
-     * completed archive run, so stale results never linger.
+     * Called strategically based on state, not every time the tab is switched.
      */
-    function resetArchiveWizard() {
+     function resetArchiveWizard(force = false) {
         const container = document.querySelector('.woam-steps[data-mode="archive"]');
         if (!container) return;
 
+        const startBtn = document.getElementById('woam-archive-start');
+
+        // Don't reset if a job is currently running
+        if (state.wizardState === 'running') {
+            return;
+        }
+
+        // Reset to step 1
         setStep(container, 1, true);
 
+        // Clear the analysis containers
+        const analysisEl = document.getElementById('woam-general-analysis');
+        const breakdownEl = document.getElementById('woam-general-breakdown');
+        const totalEl = document.getElementById('woam-general-total');
+        const orderCountEl = document.getElementById('woam-general-order-count');
+        const rangeLabelEl = document.getElementById('woam-general-range-label');
+
+        if (analysisEl) analysisEl.style.display = 'none';
+        if (breakdownEl) breakdownEl.innerHTML = '';
+        if (totalEl) totalEl.innerHTML = '';
+        if (orderCountEl) orderCountEl.textContent = '0 orders';
+        if (rangeLabelEl) rangeLabelEl.textContent = '';
+
+        // Reset date inputs to default (last 12 months)
+        const fromInput = document.getElementById('woam-date-from');
+        const toInput = document.getElementById('woam-date-to');
+        
+        if (fromInput && toInput) {
+            const today = new Date();
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(today.getFullYear() - 1);
+            
+            const fromStr = oneYearAgo.toISOString().split('T')[0];
+            const toStr = today.toISOString().split('T')[0];
+            
+            fromInput.value = fromStr;
+            toInput.value = toStr;
+            
+            // Update datepicker values if available
+            if (typeof jQuery !== 'undefined' && jQuery.datepicker) {
+                jQuery(fromInput).datepicker('setDate', fromStr);
+                jQuery(toInput).datepicker('setDate', toStr);
+            }
+        }
+
+        // Reset preset buttons - highlight "1 year ago" as default
+        const presetBtns = container.querySelectorAll('.woam-preset-btn');
+        presetBtns.forEach(btn => {
+            btn.classList.toggle('woam-preset-btn--active', btn.dataset.preset === '12months');
+        });
+
+        // Hide custom date range if visible
+        const dateRange = document.querySelector('.woam-date-range');
+        if (dateRange) dateRange.style.display = 'none';
+
+        // Reset status checkboxes - select recommended defaults
+        const statusCheckboxes = document.querySelectorAll('#woam-archive-statuses input');
+        const defaultStatuses = ['wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'];
+        statusCheckboxes.forEach(cb => {
+            cb.checked = defaultStatuses.includes(cb.value);
+        });
+
+        // Reset subscription status checkboxes
+        const subCheckboxes = document.querySelectorAll('#woam-subscription-statuses input');
+        subCheckboxes.forEach(cb => {
+            // Only select eligible subscription statuses by default
+            cb.checked = ['wc-cancelled', 'wc-expired', 'wc-failed'].includes(cb.value);
+        });
+
+        // Clear impact container
         const impactEl = document.getElementById('woam-archive-impact');
         if (impactEl) {
             impactEl.classList.add('woam-loading');
             impactEl.innerHTML = 'Calculating…';
         }
 
+        // Disable step 2 next button
         const step2NextBtn = document.getElementById('woam-archive-step2-next');
         if (step2NextBtn) step2NextBtn.disabled = true;
 
+        // Reset progress and summary
         const progressEl = document.getElementById('woam-archive-progress');
         const fillEl = document.getElementById('woam-archive-progress-fill');
         const summaryEl = document.getElementById('woam-archive-summary');
-        const startBtn = document.getElementById('woam-archive-start');
         const confirmGroup = document.getElementById('woam-archive-confirm-group');
         const confirmInput = document.getElementById('woam-archive-confirm');
         const dryRunCb = document.getElementById('woam-archive-dry-run');
 
         if (progressEl) progressEl.style.display = 'none';
         if (fillEl) fillEl.style.width = '0%';
-        if (summaryEl) summaryEl.innerHTML = '';
-        if (summaryEl) delete summaryEl.dataset.woamRunId;
+        if (summaryEl) {
+            summaryEl.innerHTML = '';
+            delete summaryEl.dataset.woamRunId;
+        }
         if (confirmInput) confirmInput.value = '';
+        if (confirmGroup) confirmGroup.style.display = 'none';
 
+        // Reset dry run checkbox to checked (safe default)
         if (dryRunCb) {
             dryRunCb.checked = true;
             dryRunCb.closest('label, .woam-dry-run-row, p')?.classList.remove('woam-dry-run-unchecked');
         }
-        if (confirmGroup) confirmGroup.style.display = 'none';
 
+        // Reset start button
         if (startBtn) {
             startBtn.disabled = false;
             startBtn.style.cssText = '';
@@ -1608,8 +1751,20 @@
             delete startBtn.dataset.archiveDone;
         }
 
+        // Reset state
         state.totalOrders = 0;
         state.excludeIds = [];
+        state.dirty = false;
+        state.wizardState = 'idle';
+
+        // Clear any stored recommendation from session
+        sessionStorage.removeItem('hw_woam_recommendation');
+        sessionStorage.removeItem('hw_woam_recommendation_applied');
+
+        // Auto-load analysis with the default date range
+        setTimeout(() => {
+            loadArchiveAnalysisRange();
+        }, 100);
     }
 
     /**
@@ -1751,6 +1906,8 @@
             impactEl.classList.add('woam-loading');
             impactEl.innerHTML = 'Calculating…';
 
+            state.wizardState = 'reviewing'; // Track that user is reviewing impact
+
             // Disable Continue until the data has actually loaded.
             if (step2NextBtn) step2NextBtn.disabled = true;
 
@@ -1811,6 +1968,7 @@
 
         // Step 2 → Step 3
         document.getElementById('woam-archive-step2-next').addEventListener('click', () => {
+            state.wizardState = 'running'; // Track that archive is about to run
             setStep(container, 3);
         });
 
@@ -1819,6 +1977,10 @@
             btn.addEventListener('click', () => {
                 const targetStep = parseInt(btn.dataset.stepBack);
                 setStep(container, targetStep);
+        
+                if (targetStep === 1) {
+                    state.wizardState = 'idle';
+                }
 
                 // Reset Step 3 UI when navigating away from it
                 if (targetStep < 3) {
@@ -2463,6 +2625,7 @@
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
                 const target = tab.dataset.tab;
+                const previousTarget = state.lastTab;
 
                 tabs.forEach(t => {
                     t.classList.toggle('woam-tab--active', t === tab);
@@ -2474,15 +2637,39 @@
                 });
 
                 if (target === 'overview') {
+                    // If coming from archive with dirty state, refresh data
+                    if (state.dirty) {
+                        state.dirty = false;
+                    }
                     loadOverviewTab();
                 } else if (target === 'archived') {
                     resetArchivedWizard();
                     loadArchivedTab();
-                } else if (target === 'archive') {
-                    resetArchiveWizard();
+                }  else if (target === 'archive') {
+                    // Always land on a clean Step 1 with fresh data, unless
+                    // a batch is actively mid-run. No more guessing based on
+                    // previousTarget/isCompleted/isIdle combinations.
+                    if (state.wizardState === 'running') {
+                        return;
+                    }
+                    resetArchiveWizard(true);
                 }
+                
+                state.lastTab = target;
             });
         });
+    }
+
+    /**
+     * Refresh only the analysis data without resetting the wizard
+     */
+    function refreshArchiveAnalysis() {
+        const fromDate = document.getElementById('woam-date-from')?.value;
+        const toDate = document.getElementById('woam-date-to')?.value;
+        
+        if (fromDate && toDate) {
+            loadArchiveAnalysisRange();
+        }
     }
 
     /**
