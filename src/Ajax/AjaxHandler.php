@@ -1056,7 +1056,7 @@ class AjaxHandler {
 			} elseif ( in_array( $row->post_status, $eligible_statuses, true ) ) {
 				// Double-check: does this order actually have a protected parent?
 				// Some cancelled/expired subscriptions might still have active parent orders.
-				$eligibility_check = $wpdb->get_var(
+				$eligibility_check = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 					$wpdb->prepare(
 						"SELECT COUNT(*) FROM `{$wpdb->posts}` 
 						WHERE post_parent IN (

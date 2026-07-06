@@ -186,7 +186,12 @@ class ArchiveHandler {
 				. ' ORDER BY p.ID ASC LIMIT %d';
 		}
 
+		// $sql is built entirely from trusted internal values ($posts_table,
+		// $postmeta_table are $wpdb properties; $in_placeholders/$exclude_clause
+		// are locally generated %s/%d placeholder strings, not user input) and
+		// is passed through $wpdb->prepare() with $params supplying every value.
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter
 		$col = $this->wpdb->get_col( $this->wpdb->prepare( $sql, $params ) );
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
