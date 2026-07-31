@@ -93,11 +93,6 @@ class Logger {
 	 *
 	 * @return int Number of log entries written to the database.
 	 */
-	/**
-	 * Flushes the internal log queue to the database via bulk insert.
-	 *
-	 * @return int Number of rows inserted.
-	 */
 	public function flush_queue(): int {
 
 		if ( empty( $this->log_queue ) ) {
@@ -119,18 +114,15 @@ class Logger {
 			$values[]       = $log['created_at'];
 		}
 
-		// 1. Build the dynamic template string out into a standalone variable.
-		// Using %i ensures the table structure is natively escaped safely.
 		$query = 'INSERT INTO %i (order_id, action, status, message, created_at) VALUES ' . implode( ', ', $placeholders );
+		$args  = array_merge( array( $target_table ), $values );
 
-		// 2. Prepend the target table string to the front of the flat argument array.
-		$args = array_merge( array( $target_table ), $values );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholder count is dynamic (batch size); every interpolated token is a literal %d/%s from array construction above, never raw input.
 		$prepared_sql = $db->prepare( $query, $args );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result          = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk insert as part of a batch write operation, not cacheable.
+		$result = $db->query( $prepared_sql );
+
 		$this->log_queue = array();
 
 		return is_int( $result ) ? $result : 0;
@@ -167,15 +159,13 @@ class Logger {
 		$db           = $this->wpdb;
 		$target_table = $this->tables->logs;
 
-		// 1. Isolate and combine the static/dynamic elements safely.
-		// The %i handle isolates the dynamic schema lookup cleanly.
-		$query  = 'SELECT * FROM %i ' . $where . ' ORDER BY created_at DESC LIMIT %d OFFSET %d';
-		$params = array( $target_table, $args['per_page'], $offset );
+		$query  = 'SELECT * FROM %i ' . $where['clause'] . ' ORDER BY created_at DESC LIMIT %d OFFSET %d';
+		$params = array_merge( array( $target_table ), $where['values'], array( $args['per_page'], $offset ) );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- placeholder count varies with active filters; all tokens are %i/%s/%d from controlled construction above, never raw input.
 		$prepared_sql = $db->prepare( $query, $params );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- admin log viewer needs live data, not a candidate for object caching.
 		$results = $db->get_results( $prepared_sql );
 
 		return ! empty( $results ) ? $results : array();
@@ -190,16 +180,18 @@ class Logger {
 	 */
 	public function get_count( array $args = array() ): int {
 
-		$logs_table = $this->tables->logs;
-		$where      = $this->build_where_clause( $args );
-		$query      = 'SELECT COUNT(*) FROM `' . $logs_table . '` ' . $where;
+		$db           = $this->wpdb;
+		$target_table = $this->tables->logs;
+		$where        = $this->build_where_clause( $args );
 
-		// build_where_clause() returns a sanitized SQL fragment — no raw user input.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
-		$count = (int) $this->wpdb->get_var( $query );
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+		$query  = 'SELECT COUNT(*) FROM %i ' . $where['clause'];
+		$params = array_merge( array( $target_table ), $where['values'] );
 
-		return $count;
+		// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- placeholder count varies with active filters; all tokens are %i/%s from controlled construction, never raw input.
+		$prepared_sql = $db->prepare( $query, $params );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- admin log viewer pagination count needs live data, not a candidate for object caching.
+		return (int) $db->get_var( $prepared_sql );
 	}
 
 	/**
@@ -214,46 +206,47 @@ class Logger {
 		$db           = $this->wpdb;
 		$target_table = $this->tables->logs;
 
-		// Clean template using single quotes and native %i table identifier escaping.
 		$query = 'DELETE FROM %i WHERE created_at < DATE_SUB( NOW(), INTERVAL %d DAY )';
 		$args  = array( $target_table, $days );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$prepared_sql = $db->prepare( $query, $args );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- retention cleanup; direct delete on a fixed argument count, not a candidate for caching.
 		$result = $db->query( $prepared_sql );
 
 		return is_int( $result ) ? $result : 0;
 	}
 
 	/**
-	 * Builds a SQL WHERE clause from filter arguments.
+	 * Builds a SQL WHERE clause template and its bound values from filter arguments.
 	 * Used internally by get_logs() and get_count().
 	 *
 	 * @param array<string, mixed> $args Filter arguments.
-	 * @return string WHERE clause string, or empty string if no filters.
+	 * @return array{clause: string, values: array<int, mixed>} WHERE clause template (with placeholders, or empty string if no filters) and its values.
 	 */
-	private function build_where_clause( array $args ): string {
+	private function build_where_clause( array $args ): array {
 
 		$conditions = array();
+		$values     = array();
 
 		if ( ! empty( $args['action'] ) ) {
-			$conditions[] = $this->wpdb->prepare( 'action = %s', $args['action'] );
+			$conditions[] = 'action = %s';
+			$values[]     = $args['action'];
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			$conditions[] = $this->wpdb->prepare( 'status = %s', $args['status'] );
+			$conditions[] = 'status = %s';
+			$values[]     = $args['status'];
 		}
 
 		if ( ! empty( $args['order_id'] ) ) {
-			$conditions[] = $this->wpdb->prepare( 'order_id = %d', $args['order_id'] );
+			$conditions[] = 'order_id = %d';
+			$values[]     = $args['order_id'];
 		}
 
-		if ( empty( $conditions ) ) {
-			return '';
-		}
-
-		return 'WHERE ' . implode( ' AND ', $conditions );
+		return array(
+			'clause' => empty( $conditions ) ? '' : 'WHERE ' . implode( ' AND ', $conditions ),
+			'values' => $values,
+		);
 	}
 }
