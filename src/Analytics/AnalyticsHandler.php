@@ -147,9 +147,8 @@ class AnalyticsHandler {
 				)
 			);
 
-			$avg_order_size    = $this->get_average_order_size_bytes_authoritative();
-			$total_saved_bytes = $archive_success_count * $avg_order_size;
-
+			$avg_order_size        = $this->get_average_order_size_bytes_authoritative();
+			$total_saved_bytes     = (int) round( $archive_success_count * $avg_order_size );
 			$restore_success_count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- lifetime stats query, run on-demand for the analytics dashboard.
 				$wpdb->prepare(
 					'SELECT COUNT(*) FROM %i WHERE action = %s AND status = %s',

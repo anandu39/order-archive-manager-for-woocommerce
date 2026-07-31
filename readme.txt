@@ -1,7 +1,7 @@
 === Order Archive Manager for WooCommerce ===
 Contributors: ananduravi
 Tags: woocommerce, orders, archive, performance, db-optimization
-Requires at least: 6.0
+Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 8.0
 Stable tag: 1.0.0
