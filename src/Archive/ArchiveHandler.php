@@ -82,29 +82,70 @@ class ArchiveHandler {
 		$posts_table     = $this->wpdb->posts;
 		$postmeta_table  = $this->wpdb->postmeta;
 
+		// Table identifiers are bound via %i; only the *count* of merged params is
+		// dynamic (depends on $statuses), which PHPCS cannot verify statically.
 		$subscription_filter = ' AND NOT EXISTS (
-				SELECT 1 FROM `' . $posts_table . '` s
+				SELECT 1 FROM %i s
 				WHERE s.post_parent = p.ID
 				AND s.post_type = \'shop_subscription\'
 				AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
 			)
 			AND NOT EXISTS (
-				SELECT 1 FROM `' . $postmeta_table . '` pm
+				SELECT 1 FROM %i pm
 				WHERE pm.post_id = p.ID
 				AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
 			)';
 
 		if ( ! empty( $from_date ) ) {
-			$query  = 'SELECT COUNT(*) FROM `' . $posts_table . '` p WHERE p.post_type = \'shop_order\' AND p.post_date >= %s AND p.post_date <= %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter;
-			$params = array_merge( array( $from_date . ' 00:00:00', $before_date . ' 23:59:59' ), $statuses );
-		} else {
-			$query  = 'SELECT COUNT(*) FROM `' . $posts_table . '` p WHERE p.post_type = \'shop_order\' AND p.post_date < %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter;
-			$params = array_merge( array( $before_date ), $statuses );
+			$params = array_merge(
+				array(
+					$posts_table,
+					$from_date . ' 00:00:00',
+					$before_date . ' 23:59:59',
+				),
+				$statuses,
+				array(
+					$posts_table,
+					$postmeta_table,
+				)
+			);
+
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+			// Query is built from a literal template string plus $in_placeholders (only ever
+			// literal %s tokens from array_fill()) and $subscription_filter (only ever a fixed
+			// literal fragment with two %i placeholders). No raw user input is concatenated in;
+			// PHPCS cannot statically resolve either variable's contents, so it can't verify the
+			// placeholder count/order, which is why NotPrepared also fires here.
+			return (int) $this->wpdb->get_var(
+				$this->wpdb->prepare(
+					'SELECT COUNT(*) FROM %i p WHERE p.post_type = \'shop_order\' AND p.post_date >= %s AND p.post_date <= %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter,
+					$params
+				)
+			);
+			// phpcs:enable
 		}
 
-		$prepared_sql = $this->wpdb->prepare( $query, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$params = array_merge(
+			array(
+				$posts_table,
+				$before_date,
+			),
+			$statuses,
+			array(
+				$posts_table,
+				$postmeta_table,
+			)
+		);
 
-		return (int) $this->wpdb->get_var( $prepared_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		// Same rationale as above.
+		return (int) $this->wpdb->get_var(
+			$this->wpdb->prepare(
+				'SELECT COUNT(*) FROM %i p WHERE p.post_type = \'shop_order\' AND p.post_date < %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter,
+				$params
+			)
+		);
+		// phpcs:enable
 	}
 
 	/**
@@ -133,69 +174,85 @@ class ArchiveHandler {
 		$postmeta_table  = $this->wpdb->postmeta;
 		$exclude_params  = ! empty( $exclude_ids ) ? array_map( 'intval', $exclude_ids ) : array();
 
-		// Exclude orders linked to a subscription that is still active /
-		// on-hold / pending-cancel, and exclude renewal/resubscribe orders
-		// outright. Mirrors the logic in get_subscription_status() so an
-		// order never gets fetched here only to be skipped later inside
-		// archive_order().
-		$subscription_filter = ' AND NOT EXISTS (
-				SELECT 1 FROM `' . $posts_table . '` s
-				WHERE s.post_parent = p.ID
-				AND s.post_type = \'shop_subscription\'
-				AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM `' . $postmeta_table . '` pm
-				WHERE pm.post_id = p.ID
-				AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
-			)';
-
 		$exclude_clause = ! empty( $exclude_ids )
 			? ' AND p.ID NOT IN (' . implode( ', ', array_fill( 0, count( $exclude_ids ), '%d' ) ) . ')'
 			: '';
 
 		if ( ! empty( $from_date ) ) {
 			$params = array_merge(
+				array( $posts_table ),
 				array( $from_date . ' 00:00:00', $before_date . ' 23:59:59' ),
 				$statuses,
+				array( $posts_table, $postmeta_table ),
 				$exclude_params,
 				array( $this->batch_size )
 			);
 
-			$sql = 'SELECT p.ID FROM `' . $posts_table . '` p
-				WHERE p.post_type = \'shop_order\'
-				AND p.post_date >= %s AND p.post_date <= %s
-				AND p.post_status IN (' . $in_placeholders . ')'
-				. $subscription_filter
-				. $exclude_clause
-				. ' ORDER BY p.ID ASC LIMIT %d';
-		} else {
-			$params = array_merge(
-				array( $before_date ),
-				$statuses,
-				$exclude_params,
-				array( $this->batch_size )
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i; $in_placeholders/$exclude_clause are locally generated %s/%d placeholder strings, not user input; PHPCS cannot statically resolve either variable's contents so it can't verify the final placeholder count/order; this is a live batch-fetch query that must not be cached.
+			return array_map(
+				'intval',
+				$this->wpdb->get_col(
+					$this->wpdb->prepare(
+						'SELECT p.ID FROM %i p
+							WHERE p.post_type = \'shop_order\'
+							AND p.post_date >= %s AND p.post_date <= %s
+							AND p.post_status IN (' . $in_placeholders . ')
+							AND NOT EXISTS (
+								SELECT 1 FROM %i s
+								WHERE s.post_parent = p.ID
+								AND s.post_type = \'shop_subscription\'
+								AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
+							)
+							AND NOT EXISTS (
+								SELECT 1 FROM %i pm
+								WHERE pm.post_id = p.ID
+								AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
+							)'
+							. $exclude_clause
+							. ' ORDER BY p.ID ASC LIMIT %d',
+						$params
+					)
+				)
 			);
-
-			$sql = 'SELECT p.ID FROM `' . $posts_table . '` p
-				WHERE p.post_type = \'shop_order\'
-				AND p.post_date < %s
-				AND p.post_status IN (' . $in_placeholders . ')'
-				. $subscription_filter
-				. $exclude_clause
-				. ' ORDER BY p.ID ASC LIMIT %d';
+			// phpcs:enable
 		}
 
-		// $sql is built entirely from trusted internal values ($posts_table,
-		// $postmeta_table are $wpdb properties; $in_placeholders/$exclude_clause
-		// are locally generated %s/%d placeholder strings, not user input) and
-		// is passed through $wpdb->prepare() with $params supplying every value.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		// phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter
-		$col = $this->wpdb->get_col( $this->wpdb->prepare( $sql, $params ) );
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$params = array_merge(
+			array( $posts_table ),
+			array( $before_date ),
+			$statuses,
+			array( $posts_table, $postmeta_table ),
+			$exclude_params,
+			array( $this->batch_size )
+		);
 
-		return array_map( 'intval', $col );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
+		return array_map(
+			'intval',
+			$this->wpdb->get_col(
+				$this->wpdb->prepare(
+					'SELECT p.ID FROM %i p
+						WHERE p.post_type = \'shop_order\'
+						AND p.post_date < %s
+						AND p.post_status IN (' . $in_placeholders . ')
+						AND NOT EXISTS (
+							SELECT 1 FROM %i s
+							WHERE s.post_parent = p.ID
+							AND s.post_type = \'shop_subscription\'
+							AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
+						)
+						AND NOT EXISTS (
+							SELECT 1 FROM %i pm
+							WHERE pm.post_id = p.ID
+							AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
+						)'
+						. $exclude_clause
+						. ' ORDER BY p.ID ASC LIMIT %d',
+					$params
+				)
+			)
+		);
+		// phpcs:enable
 	}
 
 	/**
@@ -218,10 +275,11 @@ class ArchiveHandler {
 		$posts_table    = $this->wpdb->posts;
 
 		// Check 1 - Is the order a renewal or resubscribe order?
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $postmeta_table is a trusted $wpdb property, not user input; per-order check performed during archiving, result must reflect current data, not a cached/stale value.
 		$renewal_meta = $this->wpdb->get_var(
 			$this->wpdb->prepare(
-				"SELECT meta_id FROM `{$postmeta_table}` WHERE post_id = %d AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe') LIMIT 1",
+				"SELECT meta_id FROM %i WHERE post_id = %d AND meta_key IN ('_subscription_renewal', '_subscription_resubscribe') LIMIT 1",
+				$postmeta_table,
 				$order_id
 			)
 		);
@@ -237,10 +295,11 @@ class ArchiveHandler {
 		}
 
 		// Check 2 - Does any subscription have this order as its parent?
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
 		$subscription_status = $this->wpdb->get_var(
 			$this->wpdb->prepare(
-				"SELECT post_status FROM `{$posts_table}` WHERE post_parent = %d AND post_type = 'shop_subscription' LIMIT 1",
+				"SELECT post_status FROM %i WHERE post_parent = %d AND post_type = 'shop_subscription' LIMIT 1",
+				$posts_table,
 				$order_id
 			)
 		);
@@ -281,38 +340,43 @@ class ArchiveHandler {
 	 * @return array<int, array>
 	 */
 	public function get_subscription_orders( string $status_filter = '' ): array {
-		global $wpdb;
 
 		if ( ! class_exists( 'WC_Subscriptions' ) ) {
 			return array();
 		}
 
-		$posts_table = $wpdb->posts;
+		$posts_table = $this->wpdb->posts;
 
 		if ( ! empty( $status_filter ) ) {
-			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$results = $wpdb->get_results(
-				$wpdb->prepare(
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $posts_table is a trusted $wpdb property, not user input; subscription list is live data that must not be served stale.
+			$results = $this->wpdb->get_results(
+				$this->wpdb->prepare(
 					"SELECT p.ID, p.post_status, p.post_date, s.post_status as subscription_status
-					FROM `{$posts_table}` p
-					INNER JOIN `{$posts_table}` s ON s.post_parent = p.ID
+					FROM %i p
+					INNER JOIN %i s ON s.post_parent = p.ID
 					WHERE p.post_type = 'shop_order'
 					AND s.post_type = 'shop_subscription'
 					AND s.post_status = %s
 					ORDER BY p.post_date DESC LIMIT 100",
+					$posts_table,
+					$posts_table,
 					$status_filter
 				)
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		} else {
-			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$results = $wpdb->get_results(
-				"SELECT p.ID, p.post_status, p.post_date, s.post_status as subscription_status
-				FROM `{$posts_table}` p
-				INNER JOIN `{$posts_table}` s ON s.post_parent = p.ID
-				WHERE p.post_type = 'shop_order'
-				AND s.post_type = 'shop_subscription'
-				ORDER BY p.post_date DESC LIMIT 100"
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
+			$results = $this->wpdb->get_results(
+				$this->wpdb->prepare(
+					"SELECT p.ID, p.post_status, p.post_date, s.post_status as subscription_status
+					FROM %i p
+					INNER JOIN %i s ON s.post_parent = p.ID
+					WHERE p.post_type = 'shop_order'
+					AND s.post_type = 'shop_subscription'
+					ORDER BY p.post_date DESC LIMIT 100",
+					$posts_table,
+					$posts_table
+				)
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
@@ -357,53 +421,62 @@ class ArchiveHandler {
 		$order_items_table      = $db->prefix . 'woocommerce_order_items';
 		$order_items_meta_table = $db->prefix . 'woocommerce_order_itemmeta';
 
-		// Use properly quoted table names with backticks.
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; all table name variables are trusted $wpdb/plugin properties, not user input; verification must reflect current data, not a cached/stale value.
 		$source_meta = (int) $db->get_var(
 			$db->prepare(
-				"SELECT COUNT(*) FROM `{$src_postmeta_tbl}` WHERE post_id = %d",
+				'SELECT COUNT(*) FROM %i WHERE post_id = %d',
+				$src_postmeta_tbl,
 				$order_id
 			)
 		);
 
 		$source_items = (int) $db->get_var(
 			$db->prepare(
-				"SELECT COUNT(*) FROM `{$order_items_table}` WHERE order_id = %d",
+				'SELECT COUNT(*) FROM %i WHERE order_id = %d',
+				$order_items_table,
 				$order_id
 			)
 		);
 
 		$source_item_meta = (int) $db->get_var(
 			$db->prepare(
-				"SELECT COUNT(*) FROM `{$order_items_meta_table}` oim 
-				INNER JOIN `{$order_items_table}` oi ON oim.order_item_id = oi.order_item_id 
-				WHERE oi.order_id = %d",
+				'SELECT COUNT(*) FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$order_items_meta_table,
+				$order_items_table,
 				$order_id
 			)
 		);
 
-		// Archive counts - use properly quoted table names.
+		// Archive counts.
 		$archive_meta = (int) $db->get_var(
 			$db->prepare(
-				"SELECT COUNT(*) FROM `{$arc_orders_meta_tbl}` WHERE post_id = %d",
+				'SELECT COUNT(*) FROM %i WHERE post_id = %d',
+				$arc_orders_meta_tbl,
 				$order_id
 			)
 		);
 
 		$archive_items = (int) $db->get_var(
 			$db->prepare(
-				"SELECT COUNT(*) FROM `{$arc_order_items_tbl}` WHERE order_id = %d",
+				'SELECT COUNT(*) FROM %i WHERE order_id = %d',
+				$arc_order_items_tbl,
 				$order_id
 			)
 		);
 
 		$archive_item_meta = (int) $db->get_var(
 			$db->prepare(
-				"SELECT COUNT(*) FROM `{$arc_item_meta_tbl}` oim 
-				INNER JOIN `{$arc_order_items_tbl}` oi ON oim.order_item_id = oi.order_item_id 
-				WHERE oi.order_id = %d",
+				'SELECT COUNT(*) FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$arc_item_meta_tbl,
+				$arc_order_items_tbl,
 				$order_id
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// Verify counts match.
 		if ( $archive_meta !== $source_meta ) {
@@ -527,7 +600,6 @@ class ArchiveHandler {
 		$target_tbl = $this->tables->orders;
 		$source_tbl = $db->posts;
 
-		// Isolate query template using single quotes and generic column maps.
 		$query = 'INSERT IGNORE INTO %i 
 			(ID, post_author, post_date, post_date_gmt, post_content, post_title,
 			post_excerpt, post_status, comment_status, ping_status, post_password,
@@ -544,11 +616,9 @@ class ArchiveHandler {
 
 		$args = array( $target_tbl, $source_tbl, $order_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$prepared_sql = $db->prepare( $query, $args );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		$result = $db->query( $prepared_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- part of a transactional archive-copy operation, not cacheable.
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to copy order #{$order_id} to archive." ) );
@@ -572,15 +642,12 @@ class ArchiveHandler {
 		$target_tbl = $this->tables->orders_meta;
 		$source_tbl = $db->postmeta;
 
-		// Pure single-quoted layout completely isolated from direct object tokens.
 		$query = 'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value) SELECT meta_id, post_id, meta_key, meta_value FROM %i WHERE post_id = %d';
 		$args  = array( $target_tbl, $source_tbl, $order_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$prepared_sql = $db->prepare( $query, $args );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		$result = $db->query( $prepared_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- part of a transactional archive-copy operation, not cacheable.
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to copy meta for order #{$order_id}." ) );
@@ -601,15 +668,12 @@ class ArchiveHandler {
 		$target_tbl = $this->tables->order_items;
 		$source_tbl = $db->prefix . 'woocommerce_order_items';
 
-		// Clean single-quoted layout isolated from dynamic properties.
 		$query = 'INSERT IGNORE INTO %i (order_item_id, order_item_name, order_item_type, order_id) SELECT order_item_id, order_item_name, order_item_type, order_id FROM %i WHERE order_id = %d';
 		$args  = array( $target_tbl, $source_tbl, $order_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$prepared_sql = $db->prepare( $query, $args );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		$result = $db->query( $prepared_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- part of a transactional archive-copy operation, not cacheable.
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to copy order items for order #{$order_id}." ) );
@@ -635,15 +699,21 @@ class ArchiveHandler {
 		$src_meta_tbl  = $db->prefix . 'woocommerce_order_itemmeta';
 		$src_items_tbl = $db->prefix . 'woocommerce_order_items';
 
-		// Clean single-quoted layout using isolated triple identifier placeholders.
-		$query = 'INSERT IGNORE INTO %i (meta_id, order_item_id, meta_key, meta_value) SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args  = array( $target_tbl, $src_meta_tbl, $src_items_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; all table name variables are trusted $wpdb/plugin properties, not user input; this is a one-off archive-copy write that must run against current data.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (meta_id, order_item_id, meta_key, meta_value)
+				SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value
+				FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$target_tbl,
+				$src_meta_tbl,
+				$src_items_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to copy order item meta for order #{$order_id}." ) );
@@ -666,27 +736,27 @@ class ArchiveHandler {
 		$target_tbl = $this->tables->order_notes;
 		$source_tbl = $db->comments;
 
-		// Clean template using escaped string variables inside isolated single quotes.
-		$query = 'INSERT IGNORE INTO %i 
-			(comment_ID, comment_post_ID, comment_author, comment_author_email,
-			comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
-			comment_content, comment_karma, comment_approved, comment_agent,
-			comment_type, comment_parent, user_id)
-			SELECT comment_ID, comment_post_ID, comment_author, comment_author_email,
-			comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
-			comment_content, comment_karma, comment_approved, comment_agent,
-			comment_type, comment_parent, user_id
-			FROM %i 
-			WHERE comment_post_ID = %d 
-			AND comment_type IN (\'order_note\', \'order_note_private\')';
-
-		$args = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$source_tbl are trusted plugin/$wpdb properties, not user input; this is a one-off archive-copy write that must run against current data.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i
+				(comment_ID, comment_post_ID, comment_author, comment_author_email,
+				comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
+				comment_content, comment_karma, comment_approved, comment_agent,
+				comment_type, comment_parent, user_id)
+				SELECT comment_ID, comment_post_ID, comment_author, comment_author_email,
+				comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
+				comment_content, comment_karma, comment_approved, comment_agent,
+				comment_type, comment_parent, user_id
+				FROM %i
+				WHERE comment_post_ID = %d
+				AND comment_type IN (\'order_note\', \'order_note_private\')',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to copy order notes for order #{$order_id}." ) );
@@ -709,21 +779,27 @@ class ArchiveHandler {
 		$src_meta_tbl = $db->commentmeta;
 		$src_comm_tbl = $db->comments;
 
-		// Pure single-quoted schema template passing triple %i table mappings.
-		$query = 'INSERT IGNORE INTO %i (meta_id, comment_id, meta_key, meta_value) SELECT cm.meta_id, cm.comment_id, cm.meta_key, cm.meta_value FROM %i cm INNER JOIN %i c ON cm.comment_id = c.comment_ID WHERE c.comment_post_ID = %d AND c.comment_type IN (\'order_note\', \'order_note_private\')';
-		$args  = array( $target_tbl, $src_meta_tbl, $src_comm_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$src_meta_tbl/$src_comm_tbl are trusted plugin/$wpdb properties, not user input; this is a one-off archive-copy write that must run against current data.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (meta_id, comment_id, meta_key, meta_value)
+				SELECT cm.meta_id, cm.comment_id, cm.meta_key, cm.meta_value
+				FROM %i cm
+				INNER JOIN %i c ON cm.comment_id = c.comment_ID
+				WHERE c.comment_post_ID = %d
+				AND c.comment_type IN (\'order_note\', \'order_note_private\')',
+				$target_tbl,
+				$src_meta_tbl,
+				$src_comm_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to copy order note meta for order #{$order_id}." ) );
 		}
 	}
-
 	/**
 	 * Copy all refund posts for an order into the order_refunds archive table.
 	 * Refunds are shop_order_refunds posts with post_parent = order_id.
@@ -734,28 +810,32 @@ class ArchiveHandler {
 	 */
 	private function copy_order_refunds( int $order_id ): void {
 
-		$db = $this->wpdb;
+		$db         = $this->wpdb;
+		$target_tbl = $this->tables->order_refunds;
+		$source_tbl = $db->posts;
 
-		// Use standard %d placeholder for the single $order_id mapping.
-		$query = "INSERT INTO {$this->tables->order_refunds} (
-            ID, post_author, post_date, post_date_gmt, post_content, post_title, 
-            post_excerpt, post_status, post_name, post_modified, post_modified_gmt, 
-            post_content_filtered, post_parent, guid, menu_order, post_type, 
-            post_mime_type, comment_count
-        )
-        SELECT 
-            ID, post_author, post_date, post_date_gmt, post_content, post_title, 
-            post_excerpt, post_status, post_name, post_modified, post_modified_gmt, 
-            post_content_filtered, post_parent, guid, menu_order, post_type, 
-            post_mime_type, comment_count
-        FROM {$db->posts}
-        WHERE post_type = 'shop_order_refund' AND post_parent = %d";
-
-		// Prepare the query safely by injecting the single order ID.
-		$prepared_sql = $db->prepare( $query, $order_id );
-
-		// Execute the query.
-		$result = $db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$source_tbl are trusted plugin/$wpdb properties, not user input; this is a one-off archive-copy write that must run against current data.
+		$result = $db->query(
+			$db->prepare(
+				"INSERT INTO %i (
+					ID, post_author, post_date, post_date_gmt, post_content, post_title,
+					post_excerpt, post_status, post_name, post_modified, post_modified_gmt,
+					post_content_filtered, post_parent, guid, menu_order, post_type,
+					post_mime_type, comment_count
+				)
+				SELECT
+					ID, post_author, post_date, post_date_gmt, post_content, post_title,
+					post_excerpt, post_status, post_name, post_modified, post_modified_gmt,
+					post_content_filtered, post_parent, guid, menu_order, post_type,
+					post_mime_type, comment_count
+				FROM %i
+				WHERE post_type = 'shop_order_refund' AND post_parent = %d",
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( false === $result ) {
 			throw new \Exception(
@@ -781,15 +861,21 @@ class ArchiveHandler {
 		$src_meta_tbl = $db->postmeta;
 		$src_post_tbl = $db->posts;
 
-		// Pure single-quoted schema template passing triple identifier placeholders.
-		$query = 'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value) SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value FROM %i pm INNER JOIN %i p ON pm.post_id = p.ID WHERE p.post_parent = %d AND p.post_type = \'shop_order_refund\'';
-		$args  = array( $target_tbl, $src_meta_tbl, $src_post_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$src_meta_tbl/$src_post_tbl are trusted plugin/$wpdb properties, not user input; this is a one-off archive-copy write that must run against current data.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value)
+				SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value
+				FROM %i pm
+				INNER JOIN %i p ON pm.post_id = p.ID
+				WHERE p.post_parent = %d AND p.post_type = \'shop_order_refund\'',
+				$target_tbl,
+				$src_meta_tbl,
+				$src_post_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( false === $result ) {
 			throw new \Exception(
@@ -814,15 +900,18 @@ class ArchiveHandler {
 		$src_meta_tbl = $db->commentmeta;
 		$src_comm_tbl = $db->comments;
 
-		// Clean template using single quotes and isolated double identifier placeholders.
-		$query = 'DELETE cm FROM %i cm INNER JOIN %i c ON cm.comment_id = c.comment_ID WHERE c.comment_post_ID = %d AND c.comment_type IN (\'order_note\', \'order_note_private\')';
-		$args  = array( $src_meta_tbl, $src_comm_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $src_meta_tbl/$src_comm_tbl are trusted $wpdb properties, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE cm FROM %i cm
+				INNER JOIN %i c ON cm.comment_id = c.comment_ID
+				WHERE c.comment_post_ID = %d AND c.comment_type IN (\'order_note\', \'order_note_private\')',
+				$src_meta_tbl,
+				$src_comm_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -836,15 +925,15 @@ class ArchiveHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $db->comments;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE comment_post_ID = %d AND comment_type IN (\'order_note\', \'order_note_private\')';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted $wpdb property, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE comment_post_ID = %d AND comment_type IN (\'order_note\', \'order_note_private\')',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -861,15 +950,18 @@ class ArchiveHandler {
 		$src_meta_tbl  = $db->prefix . 'woocommerce_order_itemmeta';
 		$src_items_tbl = $db->prefix . 'woocommerce_order_items';
 
-		// Clean join layout template passing explicit double %i table mappings.
-		$query = 'DELETE oim FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args  = array( $src_meta_tbl, $src_items_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $src_meta_tbl/$src_items_tbl are trusted $wpdb-prefixed properties, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE oim FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$src_meta_tbl,
+				$src_items_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -883,15 +975,15 @@ class ArchiveHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $db->prefix . 'woocommerce_order_items';
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE order_id = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted $wpdb-prefixed property, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE order_id = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -905,15 +997,15 @@ class ArchiveHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $db->postmeta;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE post_id = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted $wpdb property, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE post_id = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -929,15 +1021,18 @@ class ArchiveHandler {
 		$src_meta_tbl = $db->postmeta;
 		$src_post_tbl = $db->posts;
 
-		// Clean join layout template passing explicit double %i table mappings.
-		$query = 'DELETE pm FROM %i pm INNER JOIN %i p ON pm.post_id = p.ID WHERE p.post_parent = %d AND p.post_type = \'shop_order_refund\'';
-		$args  = array( $src_meta_tbl, $src_post_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $src_meta_tbl/$src_post_tbl are trusted $wpdb properties, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE pm FROM %i pm
+				INNER JOIN %i p ON pm.post_id = p.ID
+				WHERE p.post_parent = %d AND p.post_type = \'shop_order_refund\'',
+				$src_meta_tbl,
+				$src_post_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -951,15 +1046,15 @@ class ArchiveHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $db->posts;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE post_parent = %d AND post_type = \'shop_order_refund\'';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted $wpdb property, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE post_parent = %d AND post_type = \'shop_order_refund\'',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -979,26 +1074,25 @@ class ArchiveHandler {
 		$db          = $this->wpdb;
 		$stats_table = $db->prefix . 'wc_order_stats';
 
-		// Isolate the schema check statement.
-		$check_query = 'SHOW TABLES LIKE %s';
-		$check_args  = array( $stats_table );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- $stats_table is compared as a string value via SHOW TABLES LIKE, not used as a SQL identifier, so %s (not %i) is correct here; this is a one-off schema-existence check that must reflect current data.
+		$table_exists = $db->get_var(
+			$db->prepare( 'SHOW TABLES LIKE %s', $stats_table )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_check = $db->prepare( $check_query, $check_args );
-
-		if ( $db->get_var( $prepared_check ) !== $stats_table ) {
+		if ( $table_exists !== $stats_table ) {
 			return;
 		}
 
-		// Isolate the clean single-quoted delete pattern.
-		$delete_query = 'DELETE FROM %i WHERE order_id = %d';
-		$delete_args  = array( $stats_table, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_delete = $db->prepare( $delete_query, $delete_args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_delete );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $stats_table is a trusted $wpdb-prefixed property, not user input; this is a one-off archive-cleanup write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE order_id = %d',
+				$stats_table,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -1031,22 +1125,26 @@ class ArchiveHandler {
 		foreach ( $analytics_tables as $table_suffix => $column ) {
 			$table = $db->prefix . $table_suffix;
 
-			// Check if table exists.
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is compared as a string value via SHOW TABLES LIKE, not used as a SQL identifier, so %s (not %i) is correct here; this is a one-off schema-existence check that must reflect current data.
 			$table_exists = $db->get_var(
 				$db->prepare( 'SHOW TABLES LIKE %s', $table )
 			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 			if ( $table_exists !== $table ) {
 				continue;
 			}
 
-			// Properly quoted delete query.
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table and column identifiers bound via %i, not interpolated; $table/$column are derived from a fixed internal array, not user input; this is a one-off archive-cleanup write that must run against current data.
 			$db->query(
 				$db->prepare(
-					"DELETE FROM `{$table}` WHERE `{$column}` = %d",
+					'DELETE FROM %i WHERE %i = %d',
+					$table,
+					$column,
 					$order_id
 				)
 			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
 		$this->maybe_delete_customer_lookup( $order_id );
@@ -1069,47 +1167,52 @@ class ArchiveHandler {
 		$db              = $this->wpdb;
 		$customer_lookup = $db->prefix . 'wc_customer_lookup';
 
-		// 1. Isolate the table existence check.
-		$show_query = 'SHOW TABLES LIKE %s';
-		$show_args  = array( $customer_lookup );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- $customer_lookup is compared as a string value via SHOW TABLES LIKE, not used as a SQL identifier, so %s (not %i) is correct here; this is a one-off schema-existence check that must reflect current data.
+		$table_exists = $db->get_var(
+			$db->prepare( 'SHOW TABLES LIKE %s', $customer_lookup )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_show = $db->prepare( $show_query, $show_args );
-
-		if ( $db->get_var( $prepared_show ) !== $customer_lookup ) {
+		if ( $table_exists !== $customer_lookup ) {
 			return;
 		}
 
-		// 2. Isolate customer ID query template.
-		$select_query = 'SELECT customer_id FROM %i WHERE order_id = %d LIMIT 1';
-		$select_args  = array( $customer_lookup, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_select = $db->prepare( $select_query, $select_args );
-		$customer_id     = (int) $db->get_var( $prepared_select );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $customer_lookup is a trusted $wpdb-prefixed property, not user input; result must reflect current data, not a cached/stale value.
+		$customer_id = (int) $db->get_var(
+			$db->prepare(
+				'SELECT customer_id FROM %i WHERE order_id = %d LIMIT 1',
+				$customer_lookup,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( ! $customer_id ) {
 			return;
 		}
 
-		// 3. Isolate count remaining orders query template.
-		$count_query = 'SELECT COUNT(*) FROM %i WHERE customer_id = %d AND order_id != %d';
-		$count_args  = array( $customer_lookup, $customer_id, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_count   = $db->prepare( $count_query, $count_args );
-		$remaining_orders = (int) $db->get_var( $prepared_count );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
+		$remaining_orders = (int) $db->get_var(
+			$db->prepare(
+				'SELECT COUNT(*) FROM %i WHERE customer_id = %d AND order_id != %d',
+				$customer_lookup,
+				$customer_id,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// Only delete if this was their only order.
 		if ( 0 === $remaining_orders ) {
-			$delete_query = 'DELETE FROM %i WHERE customer_id = %d';
-			$delete_args  = array( $customer_lookup, $customer_id );
-
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$prepared_delete = $db->prepare( $delete_query, $delete_args );
-
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$db->query( $prepared_delete );
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
+			$db->query(
+				$db->prepare(
+					'DELETE FROM %i WHERE customer_id = %d',
+					$customer_lookup,
+					$customer_id
+				)
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 	}
 
@@ -1127,15 +1230,15 @@ class ArchiveHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $db->posts;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE ID = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted $wpdb property, not user input; this is the final archive-cleanup write and must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE ID = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
