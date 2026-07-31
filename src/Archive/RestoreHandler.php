@@ -88,28 +88,25 @@ class RestoreHandler {
 		$db    = $this->wpdb;
 		$table = $this->tables->orders;
 
-		// Branch 1: Empty statuses - count all archived records cleanly.
 		if ( empty( $statuses ) ) {
-			$query        = 'SELECT COUNT(*) FROM %i';
-			$args         = array( $table );
-			$prepared_sql = $db->prepare( $query, $args );
-
-			return (int) $db->get_var( $prepared_sql );
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $table is a trusted plugin property, not user input; count must reflect current data, not a cached/stale value.
+			return (int) $db->get_var(
+				$db->prepare( 'SELECT COUNT(*) FROM %i', $table )
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
-		// Branch 2: Handle status list logic safely.
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		$params       = array_merge( array( $table ), $statuses );
 
-		// Assemble a flat query text layout before passing it into the engine.
-		$query = "SELECT COUNT(*) FROM %i WHERE post_status IN ({$placeholders})";
-
-		// Combine table identifier and status strings sequentially into a single argument list.
-		$args = array_merge( array( $table ), $statuses );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		return (int) $db->get_var( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $placeholders contains only literal %s tokens from array_fill(), never raw input; param count depends on count( $statuses ), which PHPCS cannot verify statically; count must reflect current data, not a cached/stale value.
+		return (int) $db->get_var(
+			$db->prepare(
+				'SELECT COUNT(*) FROM %i WHERE post_status IN (' . $placeholders . ')',
+				$params
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -125,20 +122,34 @@ class RestoreHandler {
 		$table = $this->tables->orders;
 
 		if ( empty( $statuses ) ) {
-			$sql = $this->wpdb->prepare(
-				"SELECT ID FROM `{$table}` ORDER BY ID ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$this->batch_size
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $table is a trusted plugin property, not user input; batch fetch must reflect current data.
+			return array_map(
+				'intval',
+				$this->wpdb->get_col(
+					$this->wpdb->prepare(
+						'SELECT ID FROM %i ORDER BY ID ASC LIMIT %d',
+						$table,
+						$this->batch_size
+					)
+				)
 			);
-		} else {
-			$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-
-			$sql = $this->wpdb->prepare(
-				"SELECT ID FROM `{$table}` WHERE post_status IN ({$placeholders}) ORDER BY ID ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( $statuses, array( $this->batch_size ) )
-			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
-		return array_map( 'intval', $this->wpdb->get_col( $sql ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		$params       = array_merge( array( $table ), $statuses, array( $this->batch_size ) );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $placeholders contains only literal %s tokens from array_fill(), never raw input; param count depends on count( $statuses ), which PHPCS cannot verify statically; batch fetch must reflect current data.
+		return array_map(
+			'intval',
+			$this->wpdb->get_col(
+				$this->wpdb->prepare(
+					'SELECT ID FROM %i WHERE post_status IN (' . $placeholders . ') ORDER BY ID ASC LIMIT %d',
+					$params
+				)
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -157,7 +168,7 @@ class RestoreHandler {
 	 */
 	private function restore_order( int $order_id, bool $dry_run = false ): bool {
 
-		$this->wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$this->wpdb->query( 'START TRANSACTION' );
 
 		try {
 			// Copy — parent first, children after.
@@ -184,17 +195,17 @@ class RestoreHandler {
 			$this->delete_order_post( $order_id );
 
 			if ( $dry_run ) {
-				$this->wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$this->wpdb->query( 'ROLLBACK' );
 				$this->logger->queue( $order_id, 'dry_run', 'success' );
 			} else {
-				$this->wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$this->wpdb->query( 'COMMIT' );
 				$this->logger->queue( $order_id, 'restore', 'success' );
 			}
 
 			return true;
 
-		} catch ( \Exception $e ) {
-			$this->wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			$this->wpdb->query( 'ROLLBACK' );
 			$action = $dry_run ? 'dry_run' : 'restore';
 			$this->logger->queue( $order_id, $action, 'error', $e->getMessage() );
 
@@ -220,8 +231,13 @@ class RestoreHandler {
 		// If it does, the INSERT will hit a duplicate primary key error.
 		// This happens when an order was not fully removed from live tables
 		// before archiving, or a previous restore partially completed.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off existence check during restore; must reflect current live state, not cached.
 		$exists = (int) $db->get_var(
-			$db->prepare( 'SELECT COUNT(*) FROM %i WHERE ID = %d', array( $target_tbl, $order_id ) )
+			$db->prepare(
+				'SELECT COUNT(*) FROM %i WHERE ID = %d',
+				$target_tbl,
+				$order_id
+			)
 		);
 
 		if ( $exists > 0 ) {
@@ -232,14 +248,27 @@ class RestoreHandler {
 			);
 		}
 
-		$query = 'INSERT INTO %i (ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_password, post_name, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count) SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_password, post_name, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count FROM %i WHERE ID = %d';
-		$args  = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying a single archived order row back into wp_posts; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT INTO %i (
+					ID, post_author, post_date, post_date_gmt, post_content, post_title,
+					post_excerpt, post_status, post_password, post_name, post_modified,
+					post_modified_gmt, post_content_filtered, post_parent, guid, menu_order,
+					post_type, post_mime_type, comment_count
+				)
+				SELECT
+					ID, post_author, post_date, post_date_gmt, post_content, post_title,
+					post_excerpt, post_status, post_password, post_name, post_modified,
+					post_modified_gmt, post_content_filtered, post_parent, guid, menu_order,
+					post_type, post_mime_type, comment_count
+				FROM %i
+				WHERE ID = %d',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore order #{$order_id} to wp_posts. DB error: " . $db->last_error ) );
@@ -263,15 +292,15 @@ class RestoreHandler {
 		$target_tbl = $db->postmeta;
 		$source_tbl = $this->tables->orders_meta;
 
-		// Clean template using single quotes and isolated double identifier placeholders.
-		$query = 'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value) SELECT meta_id, post_id, meta_key, meta_value FROM %i WHERE post_id = %d';
-		$args  = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived order meta back into wp_postmeta; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value) SELECT meta_id, post_id, meta_key, meta_value FROM %i WHERE post_id = %d',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore meta for order #{$order_id}." ) );
@@ -291,15 +320,15 @@ class RestoreHandler {
 		$target_tbl = $db->prefix . 'woocommerce_order_items';
 		$source_tbl = $this->tables->order_items;
 
-		// Clean template using single quotes and double %i table identifier placeholders.
-		$query = 'INSERT IGNORE INTO %i (order_item_id, order_item_name, order_item_type, order_id) SELECT order_item_id, order_item_name, order_item_type, order_id FROM %i WHERE order_id = %d';
-		$args  = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived order items back into woocommerce_order_items; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (order_item_id, order_item_name, order_item_type, order_id) SELECT order_item_id, order_item_name, order_item_type, order_id FROM %i WHERE order_id = %d',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore order items for order #{$order_id}." ) );
@@ -322,15 +351,20 @@ class RestoreHandler {
 		$src_meta_tbl = $this->tables->order_items_meta;
 		$src_item_tbl = $this->tables->order_items;
 
-		// Clean complex layout template passing explicit triple %i table mappings sequentially.
-		$query = 'INSERT IGNORE INTO %i (meta_id, order_item_id, meta_key, meta_value) SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args  = array( $target_tbl, $src_meta_tbl, $src_item_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived order item meta back into woocommerce_order_itemmeta; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (meta_id, order_item_id, meta_key, meta_value)
+				SELECT oim.meta_id, oim.order_item_id, oim.meta_key, oim.meta_value
+				FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$target_tbl,
+				$src_meta_tbl,
+				$src_item_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore order item meta for order #{$order_id}." ) );
@@ -350,15 +384,27 @@ class RestoreHandler {
 		$target_tbl = $db->comments;
 		$source_tbl = $this->tables->order_notes;
 
-		// Clean template using single quotes and isolated double %i identifier placeholders.
-		$query = 'INSERT INTO %i (comment_ID, comment_post_ID, comment_author, comment_author_email, comment_author_url, comment_author_IP, comment_date, comment_date_gmt, comment_content, comment_karma, comment_approved, comment_agent, comment_type, comment_parent, user_id) SELECT comment_ID, comment_post_ID, comment_author, comment_author_email, comment_author_url, comment_author_IP, comment_date, comment_date_gmt, comment_content, comment_karma, comment_approved, comment_agent, comment_type, comment_parent, user_id FROM %i WHERE comment_post_ID = %d';
-		$args  = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived order notes back into wp_comments; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT INTO %i (
+					comment_ID, comment_post_ID, comment_author, comment_author_email,
+					comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
+					comment_content, comment_karma, comment_approved, comment_agent,
+					comment_type, comment_parent, user_id
+				)
+				SELECT
+					comment_ID, comment_post_ID, comment_author, comment_author_email,
+					comment_author_url, comment_author_IP, comment_date, comment_date_gmt,
+					comment_content, comment_karma, comment_approved, comment_agent,
+					comment_type, comment_parent, user_id
+				FROM %i
+				WHERE comment_post_ID = %d',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore order notes for order #{$order_id}." ) );
@@ -381,15 +427,20 @@ class RestoreHandler {
 		$src_meta_tbl = $this->tables->order_notes_meta;
 		$src_note_tbl = $this->tables->order_notes;
 
-		// Clean template using single quotes and explicit sequential %i identifier mappings.
-		$query = 'INSERT INTO %i (meta_id, comment_id, meta_key, meta_value) SELECT onm.meta_id, onm.comment_id, onm.meta_key, onm.meta_value FROM %i onm INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID WHERE on_.comment_post_ID = %d';
-		$args  = array( $target_tbl, $src_meta_tbl, $src_note_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived order note meta back into wp_commentmeta; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT INTO %i (meta_id, comment_id, meta_key, meta_value)
+				SELECT onm.meta_id, onm.comment_id, onm.meta_key, onm.meta_value
+				FROM %i onm
+				INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID
+				WHERE on_.comment_post_ID = %d',
+				$target_tbl,
+				$src_meta_tbl,
+				$src_note_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore order note meta for order #{$order_id}." ) );
@@ -409,15 +460,27 @@ class RestoreHandler {
 		$target_tbl = $db->posts;
 		$source_tbl = $this->tables->order_refunds;
 
-		// Clean template layout handling table allocations via %i placeholders.
-		$query = 'INSERT IGNORE INTO %i (ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_password, post_name, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count) SELECT ID, post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_password, post_name, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type, comment_count FROM %i WHERE post_parent = %d';
-		$args  = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived refund posts back into wp_posts; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (
+					ID, post_author, post_date, post_date_gmt, post_content, post_title,
+					post_excerpt, post_status, post_password, post_name, post_modified,
+					post_modified_gmt, post_content_filtered, post_parent, guid, menu_order,
+					post_type, post_mime_type, comment_count
+				)
+				SELECT
+					ID, post_author, post_date, post_date_gmt, post_content, post_title,
+					post_excerpt, post_status, post_password, post_name, post_modified,
+					post_modified_gmt, post_content_filtered, post_parent, guid, menu_order,
+					post_type, post_mime_type, comment_count
+				FROM %i
+				WHERE post_parent = %d',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore refunds for order #{$order_id}." ) );
@@ -438,15 +501,20 @@ class RestoreHandler {
 		$src_meta_tbl = $this->tables->order_refunds_meta;
 		$src_rfnd_tbl = $this->tables->order_refunds;
 
-		// Clean template using single quotes and triple %i identifier tokens sequentially.
-		$query = 'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value) SELECT rm.meta_id, rm.post_id, rm.meta_key, rm.meta_value FROM %i rm INNER JOIN %i r ON rm.post_id = r.ID WHERE r.post_parent = %d';
-		$args  = array( $target_tbl, $src_meta_tbl, $src_rfnd_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$result = $db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off restore operation copying archived refund meta back into wp_postmeta; not cacheable.
+		$result = $db->query(
+			$db->prepare(
+				'INSERT IGNORE INTO %i (meta_id, post_id, meta_key, meta_value)
+				SELECT rm.meta_id, rm.post_id, rm.meta_key, rm.meta_value
+				FROM %i rm
+				INNER JOIN %i r ON rm.post_id = r.ID
+				WHERE r.post_parent = %d',
+				$target_tbl,
+				$src_meta_tbl,
+				$src_rfnd_tbl,
+				$order_id
+			)
+		);
 
 		if ( false === $result ) {
 			throw new \Exception( esc_html( "Failed to restore refund meta for order #{$order_id}." ) );
@@ -465,13 +533,13 @@ class RestoreHandler {
 	 */
 	private function verify_order_post_restored( int $order_id ): void {
 
-		$posts_table = $this->wpdb->posts;
+		$db          = $this->wpdb;
+		$posts_table = $db->posts;
 
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$exists = (int) $this->wpdb->get_var(
-			$this->wpdb->prepare( "SELECT COUNT(*) FROM `{$posts_table}` WHERE ID = %d", $order_id )
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off verification read immediately after restore; must reflect current state, not cached.
+		$exists = (int) $db->get_var(
+			$db->prepare( 'SELECT COUNT(*) FROM %i WHERE ID = %d', $posts_table, $order_id )
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( 0 === $exists ) {
 			throw new \Exception(
@@ -496,15 +564,17 @@ class RestoreHandler {
 		$target_tbl    = $this->tables->order_notes_meta;
 		$src_notes_tbl = $this->tables->order_notes;
 
-		// Clean template using single quotes and sequential %i table identifier placeholders.
-		$query = 'DELETE onm FROM %i onm INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID WHERE on_.comment_post_ID = %d';
-		$args  = array( $target_tbl, $src_notes_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived order note meta as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE onm FROM %i onm
+				INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID
+				WHERE on_.comment_post_ID = %d',
+				$target_tbl,
+				$src_notes_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -518,15 +588,14 @@ class RestoreHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->order_notes;
 
-		// Clean template layout with single quotes and isolated %i token mapping.
-		$query = 'DELETE FROM %i WHERE comment_post_ID = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived order notes as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE comment_post_ID = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -543,15 +612,17 @@ class RestoreHandler {
 		$target_tbl   = $this->tables->order_items_meta;
 		$src_item_tbl = $this->tables->order_items;
 
-		// Clean template using single quotes and explicit double %i mappings sequentially.
-		$query = 'DELETE oim FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args  = array( $target_tbl, $src_item_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived order item meta as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE oim FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$target_tbl,
+				$src_item_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -565,15 +636,14 @@ class RestoreHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->order_items;
 
-		// Clean template layout with single quotes and isolated %i token mapping.
-		$query = 'DELETE FROM %i WHERE order_id = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived order items as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE order_id = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -587,15 +657,14 @@ class RestoreHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->orders_meta;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE post_id = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived order meta as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE post_id = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -611,15 +680,17 @@ class RestoreHandler {
 		$target_tbl   = $this->tables->order_refunds_meta;
 		$src_rfnd_tbl = $this->tables->order_refunds;
 
-		// Clean join template layout using double %i identifier maps.
-		$query = 'DELETE rm FROM %i rm INNER JOIN %i r ON rm.post_id = r.ID WHERE r.post_parent = %d';
-		$args  = array( $target_tbl, $src_rfnd_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived refund meta as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE rm FROM %i rm
+				INNER JOIN %i r ON rm.post_id = r.ID
+				WHERE r.post_parent = %d',
+				$target_tbl,
+				$src_rfnd_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -633,15 +704,14 @@ class RestoreHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->order_refunds;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE post_parent = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting archived refund posts as part of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE post_parent = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**
@@ -657,15 +727,14 @@ class RestoreHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->orders;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE ID = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cleanup deleting the archived order row as the final step of the restore transaction; not cacheable.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE ID = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
 	}
 
 	/**

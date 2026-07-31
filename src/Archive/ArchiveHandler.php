@@ -111,11 +111,7 @@ class ArchiveHandler {
 			);
 
 			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-			// Query is built from a literal template string plus $in_placeholders (only ever
-			// literal %s tokens from array_fill()) and $subscription_filter (only ever a fixed
-			// literal fragment with two %i placeholders). No raw user input is concatenated in;
-			// PHPCS cannot statically resolve either variable's contents, so it can't verify the
-			// placeholder count/order, which is why NotPrepared also fires here.
+			// phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter -- $subscription_filter is a fixed literal string built only from hardcoded SQL fragments and %i placeholders (defined above), never from user input; Plugin Check cannot trace this statically.
 			return (int) $this->wpdb->get_var(
 				$this->wpdb->prepare(
 					'SELECT COUNT(*) FROM %i p WHERE p.post_type = \'shop_order\' AND p.post_date >= %s AND p.post_date <= %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter,
@@ -138,7 +134,7 @@ class ArchiveHandler {
 		);
 
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// Same rationale as above.
+		// phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter -- same rationale as above.
 		return (int) $this->wpdb->get_var(
 			$this->wpdb->prepare(
 				'SELECT COUNT(*) FROM %i p WHERE p.post_type = \'shop_order\' AND p.post_date < %s AND p.post_status IN (' . $in_placeholders . ')' . $subscription_filter,
@@ -189,51 +185,11 @@ class ArchiveHandler {
 			);
 
 			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i; $in_placeholders/$exclude_clause are locally generated %s/%d placeholder strings, not user input; PHPCS cannot statically resolve either variable's contents so it can't verify the final placeholder count/order; this is a live batch-fetch query that must not be cached.
-			return array_map(
-				'intval',
-				$this->wpdb->get_col(
-					$this->wpdb->prepare(
-						'SELECT p.ID FROM %i p
-							WHERE p.post_type = \'shop_order\'
-							AND p.post_date >= %s AND p.post_date <= %s
-							AND p.post_status IN (' . $in_placeholders . ')
-							AND NOT EXISTS (
-								SELECT 1 FROM %i s
-								WHERE s.post_parent = p.ID
-								AND s.post_type = \'shop_subscription\'
-								AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
-							)
-							AND NOT EXISTS (
-								SELECT 1 FROM %i pm
-								WHERE pm.post_id = p.ID
-								AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
-							)'
-							. $exclude_clause
-							. ' ORDER BY p.ID ASC LIMIT %d',
-						$params
-					)
-				)
-			);
-			// phpcs:enable
-		}
-
-		$params = array_merge(
-			array( $posts_table ),
-			array( $before_date ),
-			$statuses,
-			array( $posts_table, $postmeta_table ),
-			$exclude_params,
-			array( $this->batch_size )
-		);
-
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
-		return array_map(
-			'intval',
-			$this->wpdb->get_col(
+			$col = $this->wpdb->get_col( // phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter -- $exclude_clause is built only from a fixed literal fragment and %d placeholder tokens generated via array_fill() from a known count; never raw user input.
 				$this->wpdb->prepare(
 					'SELECT p.ID FROM %i p
 						WHERE p.post_type = \'shop_order\'
-						AND p.post_date < %s
+						AND p.post_date >= %s AND p.post_date <= %s
 						AND p.post_status IN (' . $in_placeholders . ')
 						AND NOT EXISTS (
 							SELECT 1 FROM %i s
@@ -250,11 +206,46 @@ class ArchiveHandler {
 						. ' ORDER BY p.ID ASC LIMIT %d',
 					$params
 				)
+			);
+			// phpcs:enable
+			return array_map( 'intval', $col );
+		}
+
+		$params = array_merge(
+			array( $posts_table ),
+			array( $before_date ),
+			$statuses,
+			array( $posts_table, $postmeta_table ),
+			$exclude_params,
+			array( $this->batch_size )
+		);
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as above.
+		$col = $this->wpdb->get_col( // phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter -- same rationale as above.
+			$this->wpdb->prepare(
+				'SELECT p.ID FROM %i p
+					WHERE p.post_type = \'shop_order\'
+					AND p.post_date < %s
+					AND p.post_status IN (' . $in_placeholders . ')
+					AND NOT EXISTS (
+						SELECT 1 FROM %i s
+						WHERE s.post_parent = p.ID
+						AND s.post_type = \'shop_subscription\'
+						AND s.post_status NOT IN (\'wc-cancelled\', \'wc-expired\', \'wc-failed\', \'trash\')
+					)
+					AND NOT EXISTS (
+						SELECT 1 FROM %i pm
+						WHERE pm.post_id = p.ID
+						AND pm.meta_key IN (\'_subscription_renewal\', \'_subscription_resubscribe\')
+					)'
+					. $exclude_clause
+					. ' ORDER BY p.ID ASC LIMIT %d',
+				$params
 			)
 		);
 		// phpcs:enable
+		return array_map( 'intval', $col );
 	}
-
 	/**
 	 * Get detailed subscription status for an order.
 	 *

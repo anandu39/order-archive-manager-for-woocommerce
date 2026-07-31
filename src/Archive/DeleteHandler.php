@@ -84,28 +84,25 @@ class DeleteHandler {
 		$db    = $this->wpdb;
 		$table = $this->tables->orders;
 
-		// Branch 1: Empty statuses - count all archived records cleanly.
 		if ( empty( $statuses ) ) {
-			$query        = 'SELECT COUNT(*) FROM %i';
-			$args         = array( $table );
-			$prepared_sql = $db->prepare( $query, $args );
-
-			return (int) $db->get_var( $prepared_sql );
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $table is a trusted plugin property, not user input; count must reflect current data, not a cached/stale value.
+			return (int) $db->get_var(
+				$db->prepare( 'SELECT COUNT(*) FROM %i', $table )
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
-		// Branch 2: Handle status list logic safely.
 		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		$params       = array_merge( array( $table ), $statuses );
 
-		// Assemble a flat query text layout before passing it into the engine.
-		$query = "SELECT COUNT(*) FROM %i WHERE post_status IN ({$placeholders})";
-
-		// Combine table identifier and status strings sequentially into a single argument list.
-		$args = array_merge( array( $table ), $statuses );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		return (int) $db->get_var( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $placeholders contains only literal %s tokens from array_fill(), never raw input; param count depends on count( $statuses ), which PHPCS cannot verify statically; count must reflect current data, not a cached/stale value.
+		return (int) $db->get_var(
+			$db->prepare(
+				'SELECT COUNT(*) FROM %i WHERE post_status IN (' . $placeholders . ')',
+				$params
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -121,20 +118,34 @@ class DeleteHandler {
 		$table = $this->tables->orders;
 
 		if ( empty( $statuses ) ) {
-			$sql = $this->wpdb->prepare(
-				"SELECT ID FROM `{$table}` ORDER BY ID ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$this->batch_size
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $table is a trusted plugin property, not user input; batch fetch must reflect current data.
+			return array_map(
+				'intval',
+				$this->wpdb->get_col(
+					$this->wpdb->prepare(
+						'SELECT ID FROM %i ORDER BY ID ASC LIMIT %d',
+						$table,
+						$this->batch_size
+					)
+				)
 			);
-		} else {
-			$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-
-			$sql = $this->wpdb->prepare(
-				"SELECT ID FROM `{$table}` WHERE post_status IN ({$placeholders}) ORDER BY ID ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( $statuses, array( $this->batch_size ) )
-			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
-		return array_map( 'intval', $this->wpdb->get_col( $sql ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+		$params       = array_merge( array( $table ), $statuses, array( $this->batch_size ) );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $placeholders contains only literal %s tokens from array_fill(), never raw input; param count depends on count( $statuses ), which PHPCS cannot verify statically; batch fetch must reflect current data.
+		return array_map(
+			'intval',
+			$this->wpdb->get_col(
+				$this->wpdb->prepare(
+					'SELECT ID FROM %i WHERE post_status IN (' . $placeholders . ') ORDER BY ID ASC LIMIT %d',
+					$params
+				)
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -198,15 +209,18 @@ class DeleteHandler {
 		$target_tbl = $this->tables->order_notes_meta;
 		$source_tbl = $this->tables->order_notes;
 
-		// Clean join template using single quotes and isolated double %i identifier placeholders.
-		$query = 'DELETE onm FROM %i onm INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID WHERE on_.comment_post_ID = %d';
-		$args  = array( $target_tbl, $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$source_tbl are trusted plugin properties, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE onm FROM %i onm
+				INNER JOIN %i on_ ON onm.comment_id = on_.comment_ID
+				WHERE on_.comment_post_ID = %d',
+				$target_tbl,
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -220,15 +234,15 @@ class DeleteHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->order_notes;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE comment_post_ID = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted plugin property, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE comment_post_ID = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -245,15 +259,18 @@ class DeleteHandler {
 		$target_tbl    = $this->tables->order_items_meta;
 		$src_items_tbl = $this->tables->order_items;
 
-		// Clean join layout template passing explicit double %i table mappings.
-		$query = 'DELETE oim FROM %i oim INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id WHERE oi.order_id = %d';
-		$args  = array( $target_tbl, $src_items_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$src_items_tbl are trusted plugin properties, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE oim FROM %i oim
+				INNER JOIN %i oi ON oim.order_item_id = oi.order_item_id
+				WHERE oi.order_id = %d',
+				$target_tbl,
+				$src_items_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -267,15 +284,15 @@ class DeleteHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->order_items;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE order_id = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted plugin property, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE order_id = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -289,15 +306,15 @@ class DeleteHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->orders_meta;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE post_id = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted plugin property, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE post_id = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -314,15 +331,18 @@ class DeleteHandler {
 		$target_tbl    = $this->tables->order_refunds_meta;
 		$src_posts_tbl = $this->tables->order_refunds;
 
-		// Clean join template layout using double %i identifier maps.
-		$query = 'DELETE rm FROM %i rm INNER JOIN %i r ON rm.post_id = r.ID WHERE r.post_parent = %d';
-		$args  = array( $target_tbl, $src_posts_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifiers bound via %i, not interpolated; $target_tbl/$src_posts_tbl are trusted plugin properties, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE rm FROM %i rm
+				INNER JOIN %i r ON rm.post_id = r.ID
+				WHERE r.post_parent = %d',
+				$target_tbl,
+				$src_posts_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -336,15 +356,15 @@ class DeleteHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->order_refunds;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE post_parent = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted plugin property, not user input; this is a one-off permanent-delete write that must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE post_parent = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -360,15 +380,15 @@ class DeleteHandler {
 		$db         = $this->wpdb;
 		$source_tbl = $this->tables->orders;
 
-		// Clean template using single quotes and isolated identifier placeholders.
-		$query = 'DELETE FROM %i WHERE ID = %d';
-		$args  = array( $source_tbl, $order_id );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$prepared_sql = $db->prepare( $query, $args );
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$db->query( $prepared_sql );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier bound via %i, not interpolated; $source_tbl is a trusted plugin property, not user input; this is the final permanent-delete write and must run against current data.
+		$db->query(
+			$db->prepare(
+				'DELETE FROM %i WHERE ID = %d',
+				$source_tbl,
+				$order_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
