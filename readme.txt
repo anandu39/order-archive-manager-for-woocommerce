@@ -58,7 +58,7 @@ Unlike plugins that only change order status or soft-delete orders, this plugin 
 
 = Created by Anandu Ravikumar =
 
-Developed by a WooCommerce expert focused on database optimization and performance.
+Developed by a WordPress and WooCommerce plugin developer focused on database optimization and performance
 
 == Installation ==
 
@@ -123,11 +123,15 @@ Yes. The plugin operates directly on database tables and doesn't interfere with 
 
 == Screenshots ==
 
-1. Overview tab showing database health score and storage composition
-2. Archive Orders step flow — select filters and review impact before running
-3. Archived Orders tab with inventory breakdown and restore/delete controls
-4. Database visualizer showing table size breakdown
-5. Activity log showing recent archive and restore operations
+1. Database health score with smart recommendations for what to archive next
+2. Storage composition breakdown and lifetime archiving statistics
+3. Archive readiness checklist and database growth forecasting
+4. Archive Orders step 1 — filter by date range and order status with live eligibility counts
+5. Archive Orders step 2 — review exactly how many rows and how much space will be affected
+6. Archive Orders step 3 — real-time batch progress with dry run option
+7. Archived Orders dashboard with restore confidence and integrity verification
+8. Restore or permanently delete archived orders, filtered by status
+9. Restore in progress — live batch tracking with success/skip/fail counts
 
 == Changelog ==
 

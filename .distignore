@@ -1,0 +1,11 @@
+.wordpress-org
+.github
+.git
+.gitignore
+.gitattributes
+tests
+phpstan.neon
+phpstan-stubs.php
+phpcs.xml.dist
+*.md
+.DS_Store
