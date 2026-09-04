@@ -3,7 +3,7 @@
  * Plugin Name: Order Archive Manager for WooCommerce
  * Plugin URI: https://anandu39.github.io/Anandu-Ravikumar/order-archive-manager-for-woocommerce
  * Description: A plugin to securely archive WooCommerce orders from legacy tables into separate archive custom tables, ensuring data integrity and compliance with data retention policies.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Anandu Ravikumar
  * Author URI: https://anandu39.github.io/Anandu-Ravikumar/
  * License: GPL-2.0-or-later
@@ -11,7 +11,7 @@
  * Text Domain: order-archive-manager-for-woocommerce
  * Domain Path: /languages
  * Requires at least: 6.2
- * Tested up to: 7.0
+ * Tested up to: 7.1
  * Requires PHP: 8.0
  * Requires Plugins: woocommerce
  *
@@ -41,7 +41,7 @@ if ( version_compare( PHP_VERSION, '8.0', '<' ) ) {
 /**
  * Plugin constants.
  */
-define( 'HW_WOAM_VERSION', '1.0.0' );
+define( 'HW_WOAM_VERSION', '1.0.1' );
 define( 'HW_WOAM_PATH', plugin_dir_path( __FILE__ ) );
 define( 'HW_WOAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'HW_WOAM_BASENAME', plugin_basename( __FILE__ ) );
