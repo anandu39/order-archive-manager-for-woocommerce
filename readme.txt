@@ -2,9 +2,9 @@
 Contributors: ananduravi
 Tags: woocommerce, orders, archive, performance, db-optimization
 Requires at least: 6.2
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,10 @@ When an order is archived, the following data moves with it:
 * Refund posts and their meta
 
 = Compatibility =
+
+**WordPress** - Tested with WordPress 7.1.
+
+**WooCommerce** - Tested with WooCommerce 11.1.0.
 
 **HPOS Support** - This version supports legacy post-based order storage only. Stores using WooCommerce High-Performance Order Storage (HPOS) will see an admin notice and the plugin will remain inactive. HPOS support is planned for a future release.
 
@@ -95,11 +99,11 @@ The plugin detects active subscriptions and skips any order that is a renewal or
 
 = Is HPOS supported? =
 
-Not in version 1.0. If HPOS is enabled on your store, the plugin displays an admin notice and stays inactive. HPOS support is on the roadmap for a future release.
+Not in version 1.0.1. If HPOS is enabled on your store, the plugin displays an admin notice and stays inactive. HPOS support is on the roadmap for a future release.
 
 = Does it support multisite? =
 
-Not tested on multisite in version 1.0. Each site in a network has its own table prefix, so the plugin should create separate archive tables per site, but this has not been verified.
+Not tested on multisite in version 1.0.1. Each site in a network has its own table prefix, so the plugin should create separate archive tables per site, but this has not been verified.
 
 = What is dry run mode? =
 
@@ -111,7 +115,7 @@ Yes. Add this to your theme's `functions.php` or a custom plugin:
 
 `add_filter( 'hw_woam_batch_size', function() { return 100; } );`
 
-The default is 50 orders per batch. Increase it on fast servers, decrease it on shared hosting if you see timeouts.
+The default is 500 orders per batch. Increase it on fast servers, decrease it on shared hosting if you see timeouts.
 
 = How do I know if my database is compatible? =
 
@@ -151,6 +155,9 @@ Yes. The plugin operates directly on database tables and doesn't interfere with 
 * Real-time savings estimation
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+Compatibility update for WordPress 7.1 and WooCommerce 11.1.0. No upgrade steps required.
 
 = 1.0.0 =
 Initial release. No upgrade steps required.
